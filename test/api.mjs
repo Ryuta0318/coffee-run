@@ -18,17 +18,20 @@ const MIN = 60e3;
 
 function client() {
   let cookie = "";
-  return async (path, { method = "GET", body, headers = {} } = {}) => {
+  const call = async (path, { method = "GET", body, raw, headers = {} } = {}) => {
     const r = await fetch(BASE + path, {
       method,
       headers: { ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}), ...headers },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: raw !== undefined ? raw : body !== undefined ? JSON.stringify(body) : undefined,
     });
     const sc = r.headers.get("set-cookie");
     if (sc) cookie = sc.split(";")[0];
     const j = await r.json().catch(() => ({}));
     return { status: r.status, ...j };
   };
+  // JSON ではない返事（写真など）をそのまま受け取る
+  call.raw = (path) => fetch(BASE + path, { headers: cookie ? { cookie } : {} });
+  return call;
 }
 const step = (t) => console.log("・" + t);
 const sfx = Date.now().toString(36).slice(-4);
@@ -60,6 +63,23 @@ assert.equal(o.me.color, "#2C1710");
 const m = await mem("/api/signup", { method: "POST", body: { name: "メンバー" + sfx, color: "javascript:alert(1)" } });
 assert.equal(m.me.color, "#EF2027", "知らない色は既定の赤になる");
 await other("/api/signup", { method: "POST", body: { name: "ほか" + sfx, paypayId: "hoka" } });
+
+step("アイコンの写真");
+const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1]);
+assert.equal((await mem("/api/me/photo", { method: "POST", raw: new TextEncoder().encode("<svg onload=alert(1)>"), headers: { "content-type": "image/jpeg" } })).error, "photo_type", "画像でないものは保存しない");
+assert.equal((await mem("/api/me/photo", { method: "POST", raw: jpeg, headers: { "content-type": "image/png" } })).error, "photo_type", "中身と種類が合わないものも保存しない");
+assert.equal((await mem("/api/me/photo", { method: "POST", raw: new Uint8Array(400 * 1024).fill(0xff), headers: { "content-type": "image/jpeg" } })).error, "photo_size");
+let pr = await mem("/api/me/photo", { method: "POST", raw: jpeg, headers: { "content-type": "image/jpeg" } });
+assert.ok(pr.me.photo > 0);
+const photoPath = "/api/photo/" + m.me.id;
+assert.equal((await fetch(BASE + photoPath)).status, 401, "ログインしていない人には見せない");
+const got1 = await org.raw(photoPath);
+assert.equal(got1.headers.get("content-type"), "image/jpeg");
+assert.equal(got1.headers.get("x-content-type-options"), "nosniff");
+assert.equal((await org("/api/boot")).profiles[m.me.id].photo, pr.me.photo, "ほかの人にも写真の版が届く");
+pr = await mem("/api/me/photo", { method: "DELETE" });
+assert.equal(pr.me.photo, 0);
+assert.equal((await org.raw(photoPath)).status, 404);
 
 step("プッシュの購読");
 assert.equal((await mem("/api/push/subscribe", { method: "POST", body: { endpoint: "https://evil.example.com/x", keys: { p256dh: "a", auth: "b" } } })).status, 400);

@@ -40,6 +40,9 @@ await shot(A, "01-signup");
 await A.fill("#pf-name", nameA);
 await A.fill("#pf-paypay", "yamada-kc");
 await A.click('button[aria-label="色を選ぶ"] >> nth=0');
+// 写真をアイコンにする（登録と同時に保存される）
+await A.setInputFiles("#pf-photo", new URL("../public/assets/icon-512.png", import.meta.url).pathname);
+await A.waitForSelector('button[aria-label="写真を選ぶ"] img[src^="data:image/jpeg"]');
 await A.click("text=はじめる");
 await A.waitForSelector("text=みんなもコーヒーいるかな？");
 
@@ -70,6 +73,9 @@ assert.match(await clip(A), /☕ COFFEE RUN｜.*\nマンモスコーヒー行き
 
 step("もう1人の画面に、リロードなしで投稿が出る");
 await B.waitForSelector(`article:has-text("${nameA}")`, { timeout: 5000 });
+assert.match(await A.getAttribute('button[aria-label="アカウント"] img', "src"), /^\/api\/photo\/[a-f0-9]{20}\?v=\d+$/, "ヘッダーのアイコンが写真");
+await B.waitForSelector(`article:has-text("${nameA}") img[src^="/api/photo/"]`);
+assert.ok(await B.evaluate(() => [...document.querySelectorAll('img[src^="/api/photo/"]')].every((i) => i.complete && i.naturalWidth === 256)), "写真は 256px の正方形");
 await B.waitForTimeout(300);
 await shot(B, "03-feed");
 

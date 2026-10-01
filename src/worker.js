@@ -28,6 +28,14 @@ const oneLine = (v, max) => str(typeof v === "string" ? v.replace(/[\r\n]+/g, " 
 
 const COLORS = ["#EF2027", "#A0643C", "#C49A78", "#2C1710", "#3F7A3A"];
 const MODES = ["go", "ask"];
+const PHOTO_MAX = 300 * 1024;
+// 中身の先頭のバイトで画像の種類を見分ける（content-type だけを信じない）
+function sniff(b) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return "";
+}
 const MIN = 60e3;
 const JST = 9 * 3600e3;
 const hmJst = (ms) => {
@@ -73,6 +81,11 @@ export class Hub extends DurableObject {
       "CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT)",
     ])
       this.sql.exec(s);
+    // アイコンの写真（photo は版の番号＝保存した時刻。0 なら写真なし）
+    try {
+      this.sql.exec("ALTER TABLE profiles ADD COLUMN photo INTEGER NOT NULL DEFAULT 0");
+    } catch {}
+    this.sql.exec("CREATE TABLE IF NOT EXISTS photos(uid TEXT PRIMARY KEY, mime TEXT, data BLOB, ts INTEGER)");
     const v = this.one("SELECT v FROM kv WHERE k='menu_version'");
     if (!v || Number(v.v) < MENU_VERSION) {
       for (const store of Object.keys(MENU)) this.replaceMenu(store, MENU[store]);
@@ -159,7 +172,7 @@ export class Hub extends DurableObject {
 
   // ---- 出力の形 ----
   profileOut(p) {
-    return p ? { id: p.id, name: p.name, paypayId: p.paypay_id || "", color: p.color } : null;
+    return p ? { id: p.id, name: p.name, paypayId: p.paypay_id || "", color: p.color, photo: p.photo || 0 } : null;
   }
   meOut(p) {
     if (!p) return null;
@@ -285,6 +298,38 @@ export class Hub extends DurableObject {
       this.broadcast({ t: "profile", profile: this.profileOut(row) });
       return json({ me: this.meOut(row) });
     }
+    // ---- アイコンの写真（端末で正方形・256px に縮めてから送ってもらう）----
+    if (path === "/api/me/photo" && method === "POST") {
+      const u = need();
+      const mime = (req.headers.get("content-type") || "").split(";")[0].trim();
+      const buf = new Uint8Array(await req.arrayBuffer());
+      if (!buf.length || buf.length > PHOTO_MAX) throw bad("photo_size");
+      if (sniff(buf) !== mime) throw bad("photo_type");
+      const ts = Date.now();
+      this.run("INSERT OR REPLACE INTO photos(uid,mime,data,ts) VALUES(?,?,?,?)", u.id, mime, buf, ts);
+      this.run("UPDATE profiles SET photo=? WHERE id=?", ts, u.id);
+      const row = this.one("SELECT * FROM profiles WHERE id=?", u.id);
+      this.broadcast({ t: "profile", profile: this.profileOut(row) });
+      return json({ me: this.meOut(row) });
+    }
+    if (path === "/api/me/photo" && method === "DELETE") {
+      const u = need();
+      this.run("DELETE FROM photos WHERE uid=?", u.id);
+      this.run("UPDATE profiles SET photo=0 WHERE id=?", u.id);
+      const row = this.one("SELECT * FROM profiles WHERE id=?", u.id);
+      this.broadcast({ t: "profile", profile: this.profileOut(row) });
+      return json({ me: this.meOut(row) });
+    }
+    if ((m = path.match(/^\/api\/photo\/([a-f0-9]{20})$/)) && method === "GET") {
+      need();
+      const ph = this.one("SELECT mime, data FROM photos WHERE uid=?", m[1]);
+      if (!ph) throw new HttpError(404, "not_found");
+      // URL に ?v=版 が付くので、長くキャッシュしてよい
+      return new Response(ph.data, {
+        headers: { "content-type": ph.mime, "cache-control": "private, max-age=31536000, immutable", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'" },
+      });
+    }
+
     if (path === "/api/logout" && method === "POST") {
       const m2 = (req.headers.get("cookie") || "").match(/(?:^|;\s*)cr=([a-f0-9]{48})/);
       if (m2) this.run("DELETE FROM sessions WHERE tok=?", await sha(m2[1]));

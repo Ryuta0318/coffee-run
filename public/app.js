@@ -163,8 +163,39 @@ async function pushDisable() {
 }
 
 // ---- 部品 ----
-const Av = ({ size, bg, fs, children, extra = "" }) =>
-  html`<span style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:#FFFFFF;font-size:${fs}px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;${extra}">${children}</span>`;
+// アイコン。写真があれば写真、なければ色＋頭文字
+const Av = ({ size, bg, fs, children, src, fg = "#FFFFFF", extra = "" }) =>
+  html`<span style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};color:${fg};font-size:${fs}px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden;${extra}">${src
+    ? html`<img src=${src} alt="" draggable="false" style="width:100%;height:100%;object-fit:cover;display:block" />`
+    : children}</span>`;
+const photoUrl = (p) => (p && p.photo ? "/api/photo/" + p.id + "?v=" + p.photo : null);
+
+// 選んだ写真を、まん中で正方形に切り取って 256px の JPEG にする（送る量を小さく）
+async function squarePhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, ng) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = ng;
+      i.src = url;
+    });
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    if (!side) throw new Error("photo");
+    const N = 256;
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = N;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#FFFFFF";
+    g.fillRect(0, 0, N, N);
+    g.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, N, N);
+    const blob = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", 0.85));
+    if (!blob) throw new Error("photo");
+    return { blob, preview: cv.toDataURL("image/jpeg", 0.85) };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 const Splash = ({ onSkip }) => html`
   <div class="splash" onClick=${onSkip} style="position:fixed;inset:0;z-index:50;background:#FBF7F2;display:flex;align-items:center;justify-content:center;overflow:hidden;animation:crFade 350ms ease 1950ms forwards;cursor:pointer">
@@ -404,6 +435,9 @@ class App extends Component {
     const p = this.state.profiles[uid];
     return p ? p.color : "#C49A78";
   }
+  photoOf(uid) {
+    return photoUrl(this.state.me && this.state.me.id === uid ? this.state.me : this.state.profiles[uid]);
+  }
   short(o) {
     return o.itemId === "_other" ? o.name + " " + o.temp : o.name + " " + o.sizeLabel + " " + o.temp;
   }
@@ -574,7 +608,7 @@ class App extends Component {
               <button onClick=${() => this.replaySplash()} aria-label="COFFEE RUN" style="border:none;background:transparent;padding:0;cursor:pointer"><img src=${LOGO} alt="COFFEE RUN" style="height:30px;width:auto;display:block" /></button>
               <div style="display:flex;align-items:center;gap:8px">
                 <button onClick=${() => this.go("compose", { draft: this.newDraft() })} class="hv-red" style="height:36px;padding:0 16px;border-radius:18px;border:none;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer">＋ 投稿</button>
-                <button onClick=${() => this.openProfile()} aria-label="アカウント" style="width:36px;height:36px;border-radius:50%;border:none;background:${v.me.color};color:#FFFFFF;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">${v.meInitial}</button>
+                <button onClick=${() => this.openProfile()} aria-label="アカウント" style="width:36px;height:36px;border-radius:50%;border:none;background:transparent;padding:0;cursor:pointer"><${Av} size=${36} bg=${v.me.color} fs=${14} src=${photoUrl(v.me)}>${v.meInitial}<//></button>
               </div>`
           : null}
         ${v.isSignup ? html`<img src=${LOGO} alt="COFFEE RUN" style="height:20px;width:auto;display:block" />` : null}
@@ -613,7 +647,7 @@ class App extends Component {
     return html`
       <main data-screen-label="フィード" style="display:flex;flex-direction:column">
         <button onClick=${() => this.go("compose", { draft: this.newDraft() })} style="display:flex;align-items:center;gap:12px;padding:16px 20px;border:none;border-bottom:1px solid #F4EEE6;background:#FFFFFF;cursor:pointer;text-align:left">
-          <${Av} size=${40} bg=${v.me.color} fs=${15}>${v.meInitial}<//>
+          <${Av} size=${40} bg=${v.me.color} fs=${15} src=${photoUrl(v.me)}>${v.meInitial}<//>
           <span style="flex:1;display:flex;flex-direction:column;gap:3px">
             <span style="font-size:14px;font-weight:700">${v.me.name}</span>
             <span style="font-size:14px;color:#A09284">みんなもコーヒーいるかな？</span>
@@ -649,7 +683,7 @@ class App extends Component {
           return html`
             <article key=${p.id} onClick=${() => this.openPost(p.id)} onKeyDown=${(e) => e.key === "Enter" && this.openPost(p.id)} tabindex="0" class="hv-row" style="display:flex;gap:12px;padding:16px 20px 14px;border-bottom:1px solid #F4EEE6;cursor:pointer;transition:background 160ms ease">
               <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">
-                <${Av} size=${40} bg=${this.colorOf(p.organizerId)} fs=${15}>${org.slice(0, 1)}<//>
+                <${Av} size=${40} bg=${this.colorOf(p.organizerId)} fs=${15} src=${this.photoOf(p.organizerId)}>${org.slice(0, 1)}<//>
                 <span style="width:2px;flex:1;min-height:12px;background:#F4EEE6;border-radius:1px"></span>
               </div>
               <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
@@ -676,7 +710,7 @@ class App extends Component {
                 <div style="display:flex;align-items:center;gap:10px;margin-top:2px">
                   <div style="display:flex;align-items:center">
                     ${p.orders.slice(0, 4).map(
-                      (o) => html`<span style="width:24px;height:24px;border-radius:50%;background:#F3EADF;border:2px solid #FFFFFF;color:#EF2027;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:-6px;box-sizing:border-box">${this.nameOf(o.userId).slice(0, 1)}</span>`
+                      (o) => html`<${Av} size=${24} bg="#F3EADF" fg="#EF2027" fs=${10} src=${this.photoOf(o.userId)} extra="border:2px solid #FFFFFF;margin-left:-6px;box-sizing:border-box">${this.nameOf(o.userId).slice(0, 1)}<//>`
                     )}
                   </div>
                   <span style="font-size:12px;color:#7A6A5E">${joinText}</span>
@@ -695,6 +729,36 @@ class App extends Component {
     const s = v.s;
     const pf = s.pf;
     const nameOk = !!pf.name.trim();
+    // 写真：選んだばかり → その場の見本、外した → なし、それ以外 → 保存済みのもの
+    const pfPhoto = pf.photoPreview || (pf.photoRemove ? null : photoUrl(pf));
+    const pickPhoto = () => {
+      const el = document.getElementById("pf-photo");
+      if (el) el.click();
+    };
+    const onPhoto = async (e) => {
+      const file = e.currentTarget.files && e.currentTarget.files[0];
+      e.currentTarget.value = "";
+      if (!file) return;
+      try {
+        const { blob, preview } = await squarePhoto(file);
+        this.setState((x) => ({ pf: { ...x.pf, photoNew: blob, photoPreview: preview, photoRemove: false } }));
+      } catch {
+        this.showToast("この写真は読み込めませんでした");
+      }
+    };
+    const savePhoto = async (me) => {
+      if (pf.photoNew) {
+        const r = await fetch("/api/me/photo", { method: "POST", credentials: "same-origin", headers: { "content-type": "image/jpeg" }, body: pf.photoNew });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          this.showToast("写真を保存できませんでした");
+          return me;
+        }
+        return j.me;
+      }
+      if (pf.photoRemove && me.photo) return (await api("/api/me/photo", { method: "DELETE" })).me;
+      return me;
+    };
     const due = v.me.stats ? v.me.stats.due : 0;
     const ps = s.push;
     const save = () =>
@@ -703,6 +767,7 @@ class App extends Component {
         const body = { name: pf.name.trim(), paypayId: pf.paypayId.trim(), color: pf.color };
         if (v.isSignup) {
           const j = await api("/api/signup", { method: "POST", body });
+          j.me = await savePhoto(j.me);
           this.setState({ me: j.me });
           await this.refresh();
           this.connect();
@@ -710,7 +775,8 @@ class App extends Component {
           this.showToast("ようこそ、" + j.me.name + "さん");
         } else {
           const j = await api("/api/me", { method: "POST", body });
-          this.setState((x) => ({ me: j.me, profiles: { ...x.profiles, [j.me.id]: { id: j.me.id, name: j.me.name, paypayId: j.me.paypayId, color: j.me.color } } }));
+          j.me = await savePhoto(j.me);
+          this.setState((x) => ({ me: j.me, profiles: { ...x.profiles, [j.me.id]: { id: j.me.id, name: j.me.name, paypayId: j.me.paypayId, color: j.me.color, photo: j.me.photo } } }));
           // 投稿画面から PayPay ID の登録に来たときは、投稿画面に戻す
           if (s.draft && j.me.paypayId) this.go("compose", { draft: s.draft });
           else this.go("feed");
@@ -734,7 +800,7 @@ class App extends Component {
     return html`
       <main data-screen-label="アカウント" style="padding:32px 20px 24px;display:flex;flex-direction:column;gap:22px">
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
-          <span style="width:76px;height:76px;border-radius:50%;background:${pf.color};color:#FFFFFF;font-size:30px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:background 160ms ease">${(pf.name || "？").slice(0, 1)}</span>
+          <button onClick=${pickPhoto} aria-label="写真を選ぶ" style="border:none;background:transparent;padding:0;cursor:pointer;border-radius:50%"><${Av} size=${76} bg=${pf.color} fs=${30} src=${pfPhoto} extra="transition:background 160ms ease">${(pf.name || "？").slice(0, 1)}<//></button>
           ${v.isSignup
             ? html`<div style="display:flex;flex-direction:column;gap:6px;align-items:center">
                 <img src=${LOGO} alt="COFFEE RUN" style="width:100%;max-width:280px;height:auto;display:block;margin:4px 0 10px" />
@@ -759,7 +825,6 @@ class App extends Component {
         <div style="display:flex;flex-direction:column;gap:8px">
           <label for="pf-paypay" style="font-size:13px;font-weight:700;color:#2C1710">PayPay ID<span style="font-weight:400;color:#A09284;margin-left:6px">投稿して立て替えるときに使用</span></label>
           <input id="pf-paypay" class="inp" value=${pf.paypayId} maxlength="40" autocapitalize="off" autocomplete="off" spellcheck="false" onInput=${(e) => this.setState((x) => ({ pf: { ...x.pf, paypayId: e.currentTarget.value } }))} onKeyDown=${onKey} placeholder="例：yamada-kc" style="height:48px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:15px;outline:none" />
-          <span style="font-size:11px;color:#A09284;line-height:1.6">PayPayアプリの「アカウント」→「PayPay ID」で確認できます</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <${Label}>アイコンの色<//>
@@ -768,6 +833,16 @@ class App extends Component {
               (cl) => html`<button onClick=${() => this.setState((x) => ({ pf: { ...x.pf, color: cl } }))} role="radio" aria-checked=${pf.color === cl} aria-label="色を選ぶ" style="width:40px;height:40px;border-radius:50%;border:3px solid ${pf.color === cl ? "#2A1810" : "transparent"};padding:3px;background:#FFFFFF;cursor:pointer;box-sizing:border-box"><span style="display:block;width:100%;height:100%;border-radius:50%;background:${cl}"></span></button>`
             )}
           </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <${Label}>アイコンの写真<span style="font-weight:400;color:#A09284;margin-left:6px">任意</span><//>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onClick=${pickPhoto} style="height:36px;padding:0 16px;border-radius:18px;border:1px solid #D6CCC0;background:#FFFFFF;color:#3E2A20;font-size:13px;font-weight:700;cursor:pointer">${pfPhoto ? "写真を変える" : "写真を選ぶ"}</button>
+            ${pfPhoto
+              ? html`<button onClick=${() => this.setState((x) => ({ pf: { ...x.pf, photoNew: null, photoPreview: null, photoRemove: true } }))} class="hv-txt" style="height:36px;padding:0 10px;border:none;background:transparent;color:#A09284;font-size:13px;cursor:pointer">写真を外す</button>`
+              : null}
+          </div>
+          <input id="pf-photo" type="file" accept="image/*" onChange=${onPhoto} style="display:none" />
         </div>
 
         ${v.isProfile
@@ -818,7 +893,7 @@ class App extends Component {
       <main data-screen-label="新規投稿" style="padding:20px;display:flex;flex-direction:column;gap:22px">
         <div style="display:flex;gap:12px">
           <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">
-            <${Av} size=${40} bg=${me.color} fs=${15}>${v.meInitial}<//>
+            <${Av} size=${40} bg=${me.color} fs=${15} src=${photoUrl(me)}>${v.meInitial}<//>
             <span style="width:2px;flex:1;background:#EAE2D8;border-radius:1px"></span>
           </div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
@@ -860,7 +935,7 @@ class App extends Component {
         </div>
 
         <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #EAE2D8;border-radius:14px">
-          <${Av} size=${36} bg=${me.color} fs=${14}>${v.meInitial}<//>
+          <${Av} size=${36} bg=${me.color} fs=${14} src=${photoUrl(me)}>${v.meInitial}<//>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
             <span style="font-size:11px;color:#7A6A5E">受取・立替</span>
             <span style="font-size:14px;font-weight:700">${me.name}<span style="font-weight:400;color:#2C1710;margin-left:8px;font-size:12px">PayPay ID: ${me.paypayId || "未登録"}</span></span>
@@ -885,7 +960,7 @@ class App extends Component {
     return html`
       <section style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:14px">
         <div style="display:flex;gap:12px;align-items:flex-start">
-          <${Av} size=${40} bg=${this.colorOf(p.organizerId)} fs=${15}>${org.slice(0, 1)}<//>
+          <${Av} size=${40} bg=${this.colorOf(p.organizerId)} fs=${15} src=${this.photoOf(p.organizerId)}>${org.slice(0, 1)}<//>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
             <div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">${org}</span><span style="font-size:12px;color:#A09284">${ago(p.createdAt, now)}</span></div>
             <span style="font-size:20px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums">${p.title}</span>
@@ -979,7 +1054,7 @@ class App extends Component {
 
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;align-items:center;gap:10px">
-            <${Av} size=${32} bg=${me.color} fs=${13}>${me.name.slice(0, 1)}<//>
+            <${Av} size=${32} bg=${me.color} fs=${13} src=${photoUrl(me)}>${me.name.slice(0, 1)}<//>
             <span style="flex:1;font-size:14px;font-weight:700">${me.name}さんの注文</span>
             ${mine ? html`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#E4F0DB;color:#3F7A3A">注文済み</span>` : null}
           </div>
@@ -1138,7 +1213,7 @@ class App extends Component {
               const name = this.nameOf(o.userId);
               const canDel = isOrg || (o.userId === me.id && !locked);
               return html`<div key=${o.id} style="display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border:1px solid #EAE2D8;border-radius:14px">
-                <span style="width:38px;height:38px;border-radius:50%;background:#F3EADF;color:#EF2027;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">${name.slice(0, 1)}</span>
+                <${Av} size=${38} bg="#F3EADF" fg="#EF2027" fs=${14} src=${this.photoOf(o.userId)}>${name.slice(0, 1)}<//>
                 <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
                   <span style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">${name}</span><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:9px;background:${mdBg};color:${mdFg}">${mdLabel}</span></span>
                   <span style="font-size:12px;color:#7A6A5E">${this.short(o)}</span>
@@ -1302,7 +1377,7 @@ class App extends Component {
         <div style="display:flex;flex-direction:column;gap:12px">
           ${msgs.map(
             (m) => html`<div key=${m.id} style="display:flex;gap:8px;align-items:flex-end;flex-direction:${m.mine ? "row-reverse" : "row"}">
-              ${m.showAv ? html`<${Av} size=${30} bg=${this.colorOf(m.userId)} fs=${12}>${m.name.slice(0, 1)}<//>` : !m.mine ? html`<span style="width:30px;flex:none"></span>` : null}
+              ${m.showAv ? html`<${Av} size=${30} bg=${this.colorOf(m.userId)} fs=${12} src=${this.photoOf(m.userId)}>${m.name.slice(0, 1)}<//>` : !m.mine ? html`<span style="width:30px;flex:none"></span>` : null}
               <div style="display:flex;flex-direction:column;gap:3px;max-width:75%;align-items:${m.mine ? "flex-end" : "flex-start"}">
                 ${m.showAv ? html`<span style="font-size:11px;color:#7A6A5E">${m.name}</span>` : null}
                 <span style="padding:10px 14px;border-radius:${m.mine ? "18px 18px 4px 18px" : "18px 18px 18px 4px"};background:${m.mine ? "#EF2027" : "#F4EEE6"};color:${m.mine ? "#FFFFFF" : "#2A1810"};font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word">${m.text}</span>

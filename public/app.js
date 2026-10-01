@@ -18,7 +18,8 @@ const QUICK = ["了解！", "ありがとう！", "今どこ？", "着きまし�
 const ERRORS = {
   login: "もう一度ログインしてください",
   closed: "受付は締め切られました",
-  paypay_required: "投稿にはPayPay IDの登録が必要です",
+  paypay_required: "投稿にはPayPayマイコードの登録が必要です",
+  paypay_url: "PayPayのマイコードのリンク（https://qr.paypay.ne.jp/…）を貼り付けてください",
   deadline: "締切の時刻をもう一度選んでください",
   depart: "出発の時刻をもう一度選んでください",
   past_deadline: "締切時刻を過ぎているため再開できません",
@@ -59,6 +60,8 @@ const fit = (ps, sz) => {
   if (ps[i] == null) i = ps.findIndex((x) => x != null);
   return i;
 };
+const PAYPAY_URL = /https:\/\/qr\.paypay\.ne\.jp\/[A-Za-z0-9_-]{6,100}/;
+const paypayLink = (t) => ((String(t || "").match(PAYPAY_URL) || [])[0] || "");
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isMobile = () => isIOS() || /Android/.test(navigator.userAgent);
 const standalone = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
@@ -219,7 +222,7 @@ class App extends Component {
       posts: [],
       menu: { sbux: [], mammoth: [] },
       stores: null,
-      pf: { name: "", paypayId: "", color: RED },
+      pf: { name: "", paypayUrl: "", color: RED },
       view: "feed",
       activeId: q.get("p"),
       startTab: q.get("tab"),
@@ -288,7 +291,7 @@ class App extends Component {
   applyBoot(j) {
     this.skew = j.now - Date.now();
     const st = { me: j.me, profiles: j.profiles, posts: j.posts, menu: j.menu, stores: j.stores, now: j.now };
-    if (!j.me) Object.assign(st, { view: "signup", pf: { name: "", paypayId: "", color: RED } });
+    if (!j.me) Object.assign(st, { view: "signup", pf: { name: "", paypayUrl: "", color: RED } });
     else if (this.state.view === "signup" || !this.state.ready) {
       st.view = "feed";
       if (this.state.activeId && j.posts.some((p) => p.id === this.state.activeId)) {
@@ -550,7 +553,7 @@ class App extends Component {
   vals() {
     const s = this.state;
     const now = s.now;
-    const me = s.me || { id: "", name: "", paypayId: "", color: RED, last: {}, stats: { count: 0, due: 0 } };
+    const me = s.me || { id: "", name: "", paypayUrl: "", color: RED, last: {}, stats: { count: 0, due: 0 } };
     let view = s.view;
     if (view === "compose" && !s.draft) view = "feed";
     let p = view === "detail" ? this.cur() : null;
@@ -694,13 +697,15 @@ class App extends Component {
   profileView(v) {
     const s = v.s;
     const pf = s.pf;
-    const nameOk = !!pf.name.trim();
+    const payUrl = paypayLink(pf.paypayUrl);
+    const urlBad = !!pf.paypayUrl.trim() && !payUrl;
+    const nameOk = !!pf.name.trim() && !urlBad;
     const due = v.me.stats ? v.me.stats.due : 0;
     const ps = s.push;
     const save = () =>
       this.act(async () => {
         if (!nameOk) return;
-        const body = { name: pf.name.trim(), paypayId: pf.paypayId.trim(), color: pf.color };
+        const body = { name: pf.name.trim(), paypayUrl: pf.paypayUrl.trim(), color: pf.color };
         if (v.isSignup) {
           const j = await api("/api/signup", { method: "POST", body });
           this.setState({ me: j.me });
@@ -710,9 +715,9 @@ class App extends Component {
           this.showToast("ようこそ、" + j.me.name + "さん");
         } else {
           const j = await api("/api/me", { method: "POST", body });
-          this.setState((x) => ({ me: j.me, profiles: { ...x.profiles, [j.me.id]: { id: j.me.id, name: j.me.name, paypayId: j.me.paypayId, color: j.me.color } } }));
-          // 投稿画面から PayPay ID の登録に来たときは、投稿画面に戻す
-          if (s.draft && j.me.paypayId) this.go("compose", { draft: s.draft });
+          this.setState((x) => ({ me: j.me, profiles: { ...x.profiles, [j.me.id]: { id: j.me.id, name: j.me.name, color: j.me.color } } }));
+          // 投稿画面から PayPay マイコードの登録に来たときは、投稿画面に戻す
+          if (s.draft && j.me.paypayUrl) this.go("compose", { draft: s.draft });
           else this.go("feed");
           this.showToast("プロフィールを保存しました");
         }
@@ -725,7 +730,7 @@ class App extends Component {
           if (this.ws) this.ws.close();
         } catch {}
         this.ws = null;
-        this.setState({ me: null, posts: [], pf: { name: "", paypayId: "", color: RED }, draft: null, push: { ...ps, on: false } });
+        this.setState({ me: null, posts: [], pf: { name: "", paypayUrl: "", color: RED }, draft: null, push: { ...ps, on: false } });
         this.go("signup");
       });
     const onKey = (e) => {
@@ -739,7 +744,7 @@ class App extends Component {
             ? html`<div style="display:flex;flex-direction:column;gap:6px;align-items:center">
                 <img src=${LOGO} alt="COFFEE RUN" style="width:100%;max-width:280px;height:auto;display:block;margin:4px 0 10px" />
                 <span style="font-size:20px;font-weight:700">ようこそ！</span>
-                <span style="font-size:13px;color:#7A6A5E;line-height:1.6">一度登録すれば、名前やPayPay IDの入力は毎回不要です</span>
+                <span style="font-size:13px;color:#7A6A5E;line-height:1.6">一度登録すれば、名前やPayPayマイコードの入力は毎回不要です</span>
               </div>`
             : null}
           ${v.isProfile ? html`<span style="font-size:20px;font-weight:700">アカウント</span>` : null}
@@ -757,8 +762,11 @@ class App extends Component {
           <input id="pf-name" class="inp" value=${pf.name} maxlength="20" autocomplete="nickname" onInput=${(e) => this.setState((x) => ({ pf: { ...x.pf, name: e.currentTarget.value } }))} onKeyDown=${onKey} placeholder="例：山田" style="height:48px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:15px;outline:none" />
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <label for="pf-paypay" style="font-size:13px;font-weight:700;color:#2C1710">PayPay ID<span style="font-weight:400;color:#A09284;margin-left:6px">投稿して立て替えるときに使用</span></label>
-          <input id="pf-paypay" class="inp" value=${pf.paypayId} maxlength="40" autocapitalize="off" autocomplete="off" spellcheck="false" onInput=${(e) => this.setState((x) => ({ pf: { ...x.pf, paypayId: e.currentTarget.value } }))} onKeyDown=${onKey} placeholder="例：yamada-kc" style="height:48px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:15px;outline:none" />
+          <label for="pf-paypay" style="font-size:13px;font-weight:700;color:#2C1710">PayPay マイコード<span style="font-weight:400;color:#A09284;margin-left:6px">投稿して立て替えるときに使用</span></label>
+          <input id="pf-paypay" class="inp" type="url" inputmode="url" value=${pf.paypayUrl} maxlength="500" autocapitalize="off" autocomplete="off" spellcheck="false" onInput=${(e) => this.setState((x) => ({ pf: { ...x.pf, paypayUrl: e.currentTarget.value } }))} onKeyDown=${onKey} placeholder="https://qr.paypay.ne.jp/…" style="height:48px;padding:0 14px;border:1px solid ${urlBad ? "#A3161B" : "#D6CCC0"};border-radius:10px;font-size:15px;outline:none;min-width:0" />
+          <span style="font-size:11px;color:${urlBad ? "#A3161B" : "#A09284"};line-height:1.6">${urlBad
+            ? "PayPayのマイコードのリンク（https://qr.paypay.ne.jp/…）を貼り付けてください"
+            : html`PayPayアプリの「受け取る」→ マイコードの共有から「リンクをコピー」して貼り付けます。${payUrl ? html` <a href=${payUrl} target="_blank" rel="noopener" style="color:#EF2027;font-weight:700;text-decoration:none">開いて確かめる ↗</a>` : null}`}</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <${Label}>アイコンの色<//>
@@ -792,14 +800,14 @@ class App extends Component {
   // ---- 新規投稿 ----
   composeView(v) {
     const s = v.s, d = s.draft, me = v.me, stores = s.stores;
-    const postOk = !!me.paypayId && !!d.title.trim();
+    const postOk = !!me.paypayUrl && !!d.title.trim();
     const departs = [0, 10, 15, 30];
     const post = () =>
       this.act(async () => {
         if (!postOk) {
-          if (!me.paypayId) {
+          if (!me.paypayUrl) {
             this.go("profile", { pf: { ...me } });
-            this.showToast("投稿にはPayPay IDの登録が必要です");
+            this.showToast("投稿にはPayPayマイコードの登録が必要です");
           }
           return;
         }
@@ -807,7 +815,7 @@ class App extends Component {
         const body = d.body.trim() || bodyFor(stores, d.store);
         const depart = d.deadline + d.departOff * MIN;
         // クリップボードは操作の直後でないと書けないブラウザがあるので、送信より先にコピーする
-        await copy("☕ COFFEE RUN｜" + title + "\n" + body + "\n" + stores[d.store].label + "・注文締切 " + hm(d.deadline) + "／出発 " + hm(depart) + "\n支払いはPayPay（ID: " + me.paypayId + "）\n" + location.origin + "/");
+        await copy("☕ COFFEE RUN｜" + title + "\n" + body + "\n" + stores[d.store].label + "・注文締切 " + hm(d.deadline) + "／出発 " + hm(depart) + "\n支払いはPayPay（" + me.name + "さんのマイコード " + me.paypayUrl + "）\n" + location.origin + "/");
         const j = await api("/api/posts", { method: "POST", body: { title, body, store: d.store, deadline: d.deadline, depart } });
         this.upsert(j.post);
         this.go("feed", { draft: null, filter: "all" });
@@ -862,12 +870,12 @@ class App extends Component {
           <${Av} size=${36} bg=${me.color} fs=${14}>${v.meInitial}<//>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
             <span style="font-size:11px;color:#7A6A5E">受取・立替</span>
-            <span style="font-size:14px;font-weight:700">${me.name}<span style="font-weight:400;color:#2C1710;margin-left:8px;font-size:12px">PayPay ID: ${me.paypayId || "未登録"}</span></span>
+            <span style="font-size:14px;font-weight:700">${me.name}<span style="font-weight:400;color:#2C1710;margin-left:8px;font-size:12px">PayPay: ${me.paypayUrl ? "マイコード登録済み" : "未登録"}</span></span>
           </div>
           <button onClick=${() => this.go("profile", { pf: { ...me } })} style="height:32px;padding:0 12px;border-radius:16px;border:1px solid #D6CCC0;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer">変更</button>
         </div>
 
-        <button onClick=${post} class="hv-dim" style="height:54px;border:none;border-radius:27px;background:${postOk ? RED : "#D6CCC0"};color:#FFFFFF;font-size:16px;font-weight:700;cursor:pointer">${postOk ? "投稿する" : !me.paypayId ? "PayPay IDを登録して投稿" : "タイトルを入力"}</button>
+        <button onClick=${post} class="hv-dim" style="height:54px;border:none;border-radius:27px;background:${postOk ? RED : "#D6CCC0"};color:#FFFFFF;font-size:16px;font-weight:700;cursor:pointer">${postOk ? "投稿する" : !me.paypayUrl ? "PayPayマイコードを登録して投稿" : "タイトルを入力"}</button>
         <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">投稿すると共有用の文面がコピーされます。Slack・Teamsに貼り付けてください。</div>
       </main>`;
   }
@@ -1169,7 +1177,7 @@ class App extends Component {
     const remind = () =>
       this.act(async () => {
         if (!c.unpaid.length) return;
-        const t = "☕ COFFEE RUN｜" + p.title + " 精算のお願い（PayPay：" + org + " / ID " + p.paypayId + "）\n" + c.unpaid.map((o) => this.nameOf(o.userId) + "さん ¥" + yen(o.price)).join("\n");
+        const t = "☕ COFFEE RUN｜" + p.title + " 精算のお願い（PayPay：" + org + "さん " + (p.paypayUrl || "ID " + p.paypayId) + "）\n" + c.unpaid.map((o) => this.nameOf(o.userId) + "さん ¥" + yen(o.price)).join("\n");
         await copy(t);
         await api("/api/posts/" + p.id + "/remind", { method: "POST" }).catch((e) => {
           if (e.code !== "too_many") throw e;
@@ -1198,7 +1206,9 @@ class App extends Component {
 
         <div style="background:#F3EADF;padding:14px 16px;border-radius:14px;display:flex;flex-direction:column;gap:4px">
           <span style="font-size:11px;color:#7A6A5E">PayPay送金先（投稿者）</span>
-          <span style="font-size:15px;font-weight:700">${org}　<span style="font-weight:400;color:#2C1710">ID: ${p.paypayId}</span></span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="flex:1;min-width:0;font-size:15px;font-weight:700">${org}　<span style="font-weight:400;color:#2C1710">${p.paypayUrl ? "PayPayマイコード" : "ID: " + p.paypayId}</span></span>${p.paypayUrl
+            ? html`<a href=${p.paypayUrl} target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:#EF2027;text-decoration:none;flex:none">開く ↗</a>`
+            : null}</span>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -1237,12 +1247,18 @@ class App extends Component {
     const o = p.orders.find((x) => x.id === s.sheetId);
     const org = this.nameOf(p.organizerId);
     const close = () => this.setState({ sheetId: null });
-    const openPayPay = async () => {
-      await copy(String(o.price));
+    // ① 金額をコピーして、投稿者のマイコードを開く（スマホは PayPay アプリの送金画面、PC は QR コード）。
+    //    リンクそのもの（<a>）を押してもらうと、アプリで開きやすい
+    const openPayPay = (e) => {
+      copy(String(o.price));
       this.setState({ sheetOpened: true });
-      this.showToast("¥" + yen(o.price) + " をコピー → 「" + p.paypayId + "」へ送金");
-      // PayPay アプリを開く（スマホのみ。インストールされていないと開けない）
-      if (isMobile()) setTimeout(() => (location.href = "paypay://"), 600);
+      if (p.paypayUrl) this.showToast("¥" + yen(o.price) + " をコピー → PayPayで " + org + "さんへ送金");
+      else {
+        // マイコード導入前の投稿は ID しか無い
+        e.preventDefault();
+        this.showToast("¥" + yen(o.price) + " をコピー → 「" + p.paypayId + "」へ送金");
+        if (isMobile()) setTimeout(() => (location.href = "paypay://"), 600);
+      }
     };
     const report = () =>
       this.act(async () => {
@@ -1269,10 +1285,10 @@ class App extends Component {
             <span style="font-size:12px;color:#7A6A5E">${this.short(o)}</span>
           </div>
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button onClick=${openPayPay} class="hv-red" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px">1</span>金額をコピーしてPayPayを開く</button>
+            <a href=${p.paypayUrl || "#"} target="_blank" rel="noopener" onClick=${openPayPay} class="hv-red" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px;text-align:center">1</span>金額をコピーしてPayPayを開く</a>
             <button onClick=${report} aria-disabled=${!s.sheetOpened} style="height:54px;border:1.5px solid ${rb};border-radius:27px;background:#FFFFFF;color:${rf};font-size:15px;font-weight:700;cursor:${s.sheetOpened ? "pointer" : "default"};display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:${rb};color:#FFFFFF;font-size:12px;line-height:22px">2</span>送金しました（報告する）</button>
           </div>
-          <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">送り先ID：${p.paypayId}　報告後、${org}さんの確認で「確認済み」になります。</div>
+          <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">送り先：${p.paypayUrl ? org + "さんのPayPayマイコード" : "ID " + p.paypayId}　報告後、${org}さんの確認で「確認済み」になります。</div>
         </div>
       </div>`;
   }

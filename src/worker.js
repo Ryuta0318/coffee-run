@@ -28,6 +28,7 @@ const oneLine = (v, max) => str(typeof v === "string" ? v.replace(/[\r\n]+/g, " 
 
 const COLORS = ["#EF2027", "#A0643C", "#C49A78", "#2C1710", "#3F7A3A"];
 const MODES = ["go", "ask"];
+const PAYPAY_URL = /https:\/\/qr\.paypay\.ne\.jp\/[A-Za-z0-9_-]{6,100}/;
 const MIN = 60e3;
 const JST = 9 * 3600e3;
 const hmJst = (ms) => {
@@ -73,6 +74,12 @@ export class Hub extends DurableObject {
       "CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT)",
     ])
       this.sql.exec(s);
+    // PayPay は ID ではなく「マイコード」のリンクで受け取る（v1 からの追加）
+    for (const col of ["ALTER TABLE profiles ADD COLUMN paypay_url TEXT NOT NULL DEFAULT ''", "ALTER TABLE posts ADD COLUMN paypay_url TEXT NOT NULL DEFAULT ''"]) {
+      try {
+        this.sql.exec(col);
+      } catch {}
+    }
     const v = this.one("SELECT v FROM kv WHERE k='menu_version'");
     if (!v || Number(v.v) < MENU_VERSION) {
       for (const store of Object.keys(MENU)) this.replaceMenu(store, MENU[store]);
@@ -159,7 +166,7 @@ export class Hub extends DurableObject {
 
   // ---- 出力の形 ----
   profileOut(p) {
-    return p ? { id: p.id, name: p.name, paypayId: p.paypay_id || "", color: p.color } : null;
+    return p ? { id: p.id, name: p.name, color: p.color } : null;
   }
   meOut(p) {
     if (!p) return null;
@@ -168,7 +175,7 @@ export class Hub extends DurableObject {
     try {
       last = JSON.parse(p.last_orders || "{}");
     } catch {}
-    return { ...this.profileOut(p), last, stats: { count: st.n, due: st.due } };
+    return { ...this.profileOut(p), paypayUrl: p.paypay_url || "", last, stats: { count: st.n, due: st.due } };
   }
   postsOut(rows) {
     if (!rows.length) return [];
@@ -179,7 +186,8 @@ export class Hub extends DurableObject {
     return rows.map((r) => ({
       id: r.id,
       organizerId: r.organizer_id,
-      paypayId: r.paypay_id,
+      paypayUrl: r.paypay_url || "",
+      paypayId: r.paypay_id || "", // 以前の投稿（ID で登録していたころ）用
       title: r.title,
       body: r.body,
       store: r.store,
@@ -270,7 +278,7 @@ export class Hub extends DurableObject {
       const b = await this.body(req);
       const p = this.cleanProfile(b);
       const id = rid(10);
-      this.run("INSERT INTO profiles(id,name,paypay_id,color,created_at) VALUES(?,?,?,?,?)", id, p.name, p.paypayId, p.color, Date.now());
+      this.run("INSERT INTO profiles(id,name,paypay_url,color,created_at) VALUES(?,?,?,?,?)", id, p.name, p.paypayUrl, p.color, Date.now());
       const cookie = await this.startSession(id);
       const row = this.one("SELECT * FROM profiles WHERE id=?", id);
       this.broadcast({ t: "profile", profile: this.profileOut(row) });
@@ -280,7 +288,7 @@ export class Hub extends DurableObject {
     if (path === "/api/me" && method === "POST") {
       const u = need();
       const p = this.cleanProfile(await this.body(req));
-      this.run("UPDATE profiles SET name=?, paypay_id=?, color=? WHERE id=?", p.name, p.paypayId, p.color, u.id);
+      this.run("UPDATE profiles SET name=?, paypay_url=?, color=? WHERE id=?", p.name, p.paypayUrl, p.color, u.id);
       const row = this.one("SELECT * FROM profiles WHERE id=?", u.id);
       this.broadcast({ t: "profile", profile: this.profileOut(row) });
       return json({ me: this.meOut(row) });
@@ -295,7 +303,7 @@ export class Hub extends DurableObject {
     // ---- 投稿 ----
     if (path === "/api/posts" && method === "POST") {
       const u = need();
-      if (!u.paypay_id) throw bad("paypay_required");
+      if (!u.paypay_url) throw bad("paypay_required");
       const b = await this.body(req);
       const store = b.store;
       if (!STORES[store]) throw bad("store");
@@ -309,8 +317,8 @@ export class Hub extends DurableObject {
       if (!Number.isFinite(depart) || depart < deadline || depart > deadline + 3 * 3600e3) throw bad("depart");
       const id = rid(8);
       this.run(
-        "INSERT INTO posts(id,organizer_id,paypay_id,title,body,store,deadline_at,depart_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
-        id, u.id, u.paypay_id, title, body, store, deadline, depart, now
+        "INSERT INTO posts(id,organizer_id,paypay_url,title,body,store,deadline_at,depart_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        id, u.id, u.paypay_url, title, body, store, deadline, depart, now
       );
       this.sendPost(id);
       this.pushAll(
@@ -406,7 +414,7 @@ export class Hub extends DurableObject {
       this.limit("remind:" + p.id, 6, 3600e3);
       const unpaid = this.q("SELECT * FROM orders WHERE post_id=? AND status='unpaid'", p.id);
       for (const o of unpaid) {
-        this.pushTo(o.user_id, { t: "COFFEE RUN｜精算のお願い", b: `${p.title} ¥${yen(o.price)} を${u.name}さん（PayPay ID: ${p.paypay_id}）へ`, u: "/?p=" + p.id + "&tab=pay", g: "pay-" + p.id });
+        this.pushTo(o.user_id, { t: "COFFEE RUN｜精算のお願い", b: `${p.title} ¥${yen(o.price)} を${u.name}さんへ PayPay で送金してください`, u: "/?p=" + p.id + "&tab=pay", g: "pay-" + p.id });
       }
       return json({ sent: unpaid.length });
     }
@@ -473,9 +481,13 @@ export class Hub extends DurableObject {
   cleanProfile(b) {
     const name = oneLine(b.name, 20);
     if (!name) throw bad("name");
-    const paypayId = oneLine(b.paypayId, 40).replace(/\s+/g, "");
+    // PayPay の「マイコード」のリンク。共有の文面ごと貼られても、リンクだけを取り出す
+    const raw = typeof b.paypayUrl === "string" ? b.paypayUrl.slice(0, 500) : "";
+    const m = raw.match(PAYPAY_URL);
+    if (raw.trim() && !m) throw bad("paypay_url");
+    const paypayUrl = m ? m[0] : "";
     const color = COLORS.includes(b.color) ? b.color : COLORS[0];
-    return { name, paypayId, color };
+    return { name, paypayUrl, color };
   }
   cleanOrder(store, b) {
     const mode = MODES.includes(b.mode) ? b.mode : "ask";

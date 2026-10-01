@@ -38,7 +38,10 @@ await A.waitForSelector("text=ようこそ！");
 await A.waitForTimeout(2200);
 await shot(A, "01-signup");
 await A.fill("#pf-name", nameA);
-await A.fill("#pf-paypay", "yamada-kc");
+await A.fill("#pf-paypay", "https://example.com/x");
+await A.waitForSelector("text=PayPayのマイコードのリンク（https://qr.paypay.ne.jp/…）を貼り付けてください");
+// PayPay の共有の文面をそのまま貼っても、リンクだけが使われる
+await A.fill("#pf-paypay", "PayPayで送ってね https://qr.paypay.ne.jp/p2p01_testYamada123 よろしく");
 await A.click('button[aria-label="色を選ぶ"] >> nth=0');
 await A.click("text=はじめる");
 await A.waitForSelector("text=みんなもコーヒーいるかな？");
@@ -53,7 +56,7 @@ await B.waitForSelector("text=みんなもコーヒーいるかな？");
 // ---- 投稿 ----
 step("投稿をつくる（PayPay ID なしの人は登録へ）");
 await B.click("text=＋ 投稿");
-await B.waitForSelector("text=PayPay IDを登録して投稿");
+await B.waitForSelector("text=PayPayマイコードを登録して投稿");
 await B.click("text=キャンセル");
 
 await A.click("text=＋ 投稿");
@@ -66,7 +69,7 @@ assert.equal(await A.inputValue("textarea"), "スターバックス行きます�
 await A.click("text=マンモスコーヒー");
 await A.click("text=投稿する");
 await A.waitForSelector("text=投稿しました。共有文をコピー済み");
-assert.match(await clip(A), /☕ COFFEE RUN｜.*\nマンモスコーヒー行きますが.*\nマンモスコーヒー・注文締切 \d+:\d\d／出発 \d+:\d\d\n支払いはPayPay（ID: yamada-kc）/);
+assert.match(await clip(A), /☕ COFFEE RUN｜.*\nマンモスコーヒー行きますが.*\nマンモスコーヒー・注文締切 \d+:\d\d／出発 \d+:\d\d\n支払いはPayPay（.*さんのマイコード https:\/\/qr\.paypay\.ne\.jp\/p2p01_testYamada123）/);
 
 step("もう1人の画面に、リロードなしで投稿が出る");
 await B.waitForSelector(`article:has-text("${nameA}")`, { timeout: 5000 });
@@ -120,7 +123,9 @@ await B.waitForSelector("text=金額をコピーしてPayPayを開く");
 await B.click("text=送金しました（報告する）", { force: true }); // ①の前は押しても何も起きない
 assert.equal(await B.isVisible("text=金額をコピーしてPayPayを開く"), true);
 await shot(B, "06-sheet", false);
-await B.click("text=金額をコピーしてPayPayを開く");
+const [pop] = await Promise.all([B.context().waitForEvent("page"), B.click("text=金額をコピーしてPayPayを開く")]);
+assert.equal(pop.url(), "https://qr.paypay.ne.jp/p2p01_testYamada123", "投稿者のマイコードが開く");
+await pop.close();
 assert.equal(await clip(B), "380");
 await B.click("text=送金しました（報告する）");
 await B.waitForSelector("text=送金を報告しました");

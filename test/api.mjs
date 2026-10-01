@@ -54,12 +54,14 @@ const org = client(), mem = client(), other = client();
 step("登録・未ログイン");
 assert.equal((await org("/api/me")).status, 401);
 assert.equal((await org("/api/signup", { method: "POST", body: { name: "" } })).status, 400);
-const o = await org("/api/signup", { method: "POST", body: { name: "幹事" + sfx, paypayId: "kanji-kc", color: "#2C1710" } });
+const o = await org("/api/signup", { method: "POST", body: { name: "幹事" + sfx, paypayUrl: "送ってね→ https://qr.paypay.ne.jp/p2p01_kanjiTest01", color: "#2C1710" } });
 assert.equal(o.status, 200);
 assert.equal(o.me.color, "#2C1710");
+assert.equal(o.me.paypayUrl, "https://qr.paypay.ne.jp/p2p01_kanjiTest01", "マイコードのリンクだけを取り出す");
+assert.equal((await org("/api/signup", { method: "POST", body: { name: "x", paypayUrl: "https://evil.example.com/qr.paypay.ne.jp" } })).error, "paypay_url");
 const m = await mem("/api/signup", { method: "POST", body: { name: "メンバー" + sfx, color: "javascript:alert(1)" } });
 assert.equal(m.me.color, "#EF2027", "知らない色は既定の赤になる");
-await other("/api/signup", { method: "POST", body: { name: "ほか" + sfx, paypayId: "hoka" } });
+await other("/api/signup", { method: "POST", body: { name: "ほか" + sfx, paypayUrl: "https://qr.paypay.ne.jp/p2p01_hokaTest001" } });
 
 step("プッシュの購読");
 assert.equal((await mem("/api/push/subscribe", { method: "POST", body: { endpoint: "https://evil.example.com/x", keys: { p256dh: "a", auth: "b" } } })).status, 400);
@@ -76,7 +78,8 @@ const created = await org("/api/posts", { method: "POST", body: { title: "10/1�
 assert.equal(created.status, 200);
 const post = created.post;
 assert.equal(post.body, "マンモスコーヒー行きますが皆さんいけますか？", "本文が空なら定型文");
-assert.equal(post.paypayId, "kanji-kc");
+assert.equal(post.paypayUrl, "https://qr.paypay.ne.jp/p2p01_kanjiTest01");
+assert.equal((await org("/api/boot")).profiles[o.me.id].paypayUrl, undefined, "ほかの人の一覧には出さない");
 
 step("注文（金額はサーバーがメニューから決める）");
 let r = await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "honey", size: 2, temp: "ICED", mode: "go", note: "氷少なめ", price: 1 } });

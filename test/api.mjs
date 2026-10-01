@@ -169,5 +169,12 @@ if (ADMIN) {
   await org("/api/admin/menu", { method: "PUT", body: { store: "mammoth", items: cur.menu.mammoth }, headers: H });
 }
 
+step("投稿の削除は投稿者だけ（注文・チャットも消える）");
+assert.equal((await mem(`/api/posts/${post.id}`, { method: "DELETE" })).status, 403);
+assert.equal((await org(`/api/posts/${post.id}`, { method: "DELETE" })).ok, true);
+assert.equal((await org("/api/boot")).posts.some((p) => p.id === post.id), false);
+assert.equal((await mem(`/api/posts/${post.id}/messages`, { method: "POST", body: { text: "x" } })).status, 404);
+assert.deepEqual((await mem("/api/me")).me.stats, { count: 0, due: 0 }, "消した投稿の注文は集計に残らない");
+
 srv.close();
 console.log("OK");

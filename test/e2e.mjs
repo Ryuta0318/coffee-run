@@ -178,5 +178,14 @@ await B.waitForSelector("text=いつもの");
 await B.waitForSelector("text=カフェラテ M ICED（オーツミルク）");
 await shot(B, "12-usual");
 
+step("投稿者が投稿を削除 → 開いていた人はフィードに戻る");
+assert.equal(await B.isVisible('main button:text-is("削除")'), false, "投稿者以外には削除ボタンが出ない");
+await A.click(`article:has-text("${nameA}") >> nth=0`);
+A.once("dialog", (d) => d.accept());
+await A.click('button:text-is("削除")');
+await A.waitForSelector("text=投稿を削除しました");
+await B.waitForSelector("text=この投稿は削除されました");
+await B.waitForSelector("text=みんなもコーヒーいるかな？");
+
 await browser.close();
 console.log(process.exitCode ? "NG" : "OK");

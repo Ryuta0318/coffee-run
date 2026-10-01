@@ -365,6 +365,7 @@ class App extends Component {
       if (m.t === "post") this.upsert(m.post);
       else if (m.t === "profile") this.setState((s) => ({ profiles: { ...s.profiles, [m.profile.id]: m.profile } }));
       else if (m.t === "menu") this.setState({ menu: m.menu });
+      else if (m.t === "post-del") this.removePost(m.id, true);
     };
     ws.onclose = () => {
       clearInterval(this.wsPing);
@@ -374,6 +375,14 @@ class App extends Component {
       this.wsTries = (this.wsTries || 0) + 1;
       this.wsRetry = setTimeout(() => this.connect(), Math.min(15000, 1000 * 2 ** Math.min(4, this.wsTries)));
     };
+  }
+  removePost(id, byOther) {
+    const viewing = this.state.view === "detail" && this.state.activeId === id;
+    this.setState((s) => ({ posts: s.posts.filter((p) => p.id !== id) }));
+    if (viewing) {
+      this.go("feed");
+      if (byOther) this.showToast("この投稿は削除されました");
+    }
   }
   upsert(post) {
     if (!post) return;
@@ -498,6 +507,17 @@ class App extends Component {
     } finally {
       this.setState({ busy: false });
     }
+  }
+  deletePost(p, c) {
+    const open = c.unpaid.length + c.reported.length;
+    const msg = "この投稿を削除しますか？\n注文" + p.orders.length + "件とチャットもいっしょに消えます。" + (open ? "\n未精算の注文が" + open + "件あります。精算の記録も消えます。" : "");
+    if (!confirm(msg)) return;
+    this.act(async () => {
+      await api("/api/posts/" + p.id, { method: "DELETE" });
+      this.removePost(p.id, false);
+      this.go("feed");
+      this.showToast("投稿を削除しました");
+    });
   }
   replaySplash() {
     clearTimeout(this.st);
@@ -962,7 +982,9 @@ class App extends Component {
         <div style="display:flex;gap:12px;align-items:flex-start">
           <${Av} size=${40} bg=${this.colorOf(p.organizerId)} fs=${15} src=${this.photoOf(p.organizerId)}>${org.slice(0, 1)}<//>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
-            <div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">${org}</span><span style="font-size:12px;color:#A09284">${ago(p.createdAt, now)}</span></div>
+            <div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">${org}</span><span style="font-size:12px;color:#A09284">${ago(p.createdAt, now)}</span>${ctx.isOrg
+              ? html`<button onClick=${() => this.deletePost(p, c)} class="hv-txt" style="margin-left:auto;height:28px;padding:0 4px;border:none;background:transparent;color:#A09284;font-size:12px;cursor:pointer">削除</button>`
+              : null}</div>
             <span style="font-size:20px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums">${p.title}</span>
             <span style="font-size:14px;line-height:1.6;color:#3E2A20;white-space:pre-wrap;word-break:break-word">${p.body}</span>
           </div>

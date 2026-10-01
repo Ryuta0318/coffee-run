@@ -366,6 +366,19 @@ export class Hub extends DurableObject {
       return json({ post: this.postOut(id) });
     }
 
+    // 投稿の削除（投稿者だけ）。注文・チャットもいっしょに消える
+    if ((m = path.match(/^\/api\/posts\/([a-f0-9]{16})$/)) && method === "DELETE") {
+      const u = need();
+      const p = this.needPost(m[1]);
+      if (p.organizer_id !== u.id) throw new HttpError(403, "organizer_only");
+      this.run("DELETE FROM orders WHERE post_id=?", p.id);
+      this.run("DELETE FROM messages WHERE post_id=?", p.id);
+      this.run("DELETE FROM posts WHERE id=?", p.id);
+      this.broadcast({ t: "post-del", id: p.id });
+      await this.scheduleAlarm();
+      return json({ ok: true });
+    }
+
     if ((m = path.match(/^\/api\/posts\/([a-f0-9]{16})\/close$/)) && method === "POST") {
       const u = need();
       const p = this.needPost(m[1]);

@@ -116,12 +116,14 @@ await B.waitForSelector("text=受付は締め切られました。精算タブ�
 step("精算：PayPay シート → 報告");
 await B.click('button[role="tab"]:has-text("精算")');
 await B.click("text=PayPayで払う");
-await B.waitForSelector("text=金額をコピーしてPayPayを開く");
+await B.waitForSelector("text=IDをコピーしてPayPayを開く");
 await B.click("text=送金しました（報告する）", { force: true }); // ①の前は押しても何も起きない
-assert.equal(await B.isVisible("text=金額をコピーしてPayPayを開く"), true);
+assert.equal(await B.isVisible("text=IDをコピーしてPayPayを開く"), true);
 await shot(B, "06-sheet", false);
-await B.click("text=金額をコピーしてPayPayを開く");
+await B.click("text=金額をコピー");
 assert.equal(await clip(B), "380");
+await B.click("text=IDをコピーしてPayPayを開く");
+assert.equal(await clip(B), "yamada-kc", "送り先の ID がコピーされる");
 await B.click("text=送金しました（報告する）");
 await B.waitForSelector("text=送金を報告しました");
 

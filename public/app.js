@@ -759,6 +759,7 @@ class App extends Component {
         <div style="display:flex;flex-direction:column;gap:8px">
           <label for="pf-paypay" style="font-size:13px;font-weight:700;color:#2C1710">PayPay ID<span style="font-weight:400;color:#A09284;margin-left:6px">投稿して立て替えるときに使用</span></label>
           <input id="pf-paypay" class="inp" value=${pf.paypayId} maxlength="40" autocapitalize="off" autocomplete="off" spellcheck="false" onInput=${(e) => this.setState((x) => ({ pf: { ...x.pf, paypayId: e.currentTarget.value } }))} onKeyDown=${onKey} placeholder="例：yamada-kc" style="height:48px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:15px;outline:none" />
+          <span style="font-size:11px;color:#A09284;line-height:1.6">PayPayアプリの「アカウント」→「PayPay ID」で確認できます</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:10px">
           <${Label}>アイコンの色<//>
@@ -1198,7 +1199,10 @@ class App extends Component {
 
         <div style="background:#F3EADF;padding:14px 16px;border-radius:14px;display:flex;flex-direction:column;gap:4px">
           <span style="font-size:11px;color:#7A6A5E">PayPay送金先（投稿者）</span>
-          <span style="font-size:15px;font-weight:700">${org}　<span style="font-weight:400;color:#2C1710">ID: ${p.paypayId}</span></span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="flex:1;min-width:0;font-size:15px;font-weight:700;word-break:break-all">${org}　<span style="font-weight:400;color:#2C1710">ID: ${p.paypayId}</span></span><button onClick=${async () => {
+            await copy(p.paypayId);
+            this.showToast("ID「" + p.paypayId + "」をコピーしました");
+          }} style="height:30px;padding:0 12px;border-radius:15px;border:1px solid #D8C2AC;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer;flex:none">IDをコピー</button></span>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -1237,12 +1241,18 @@ class App extends Component {
     const o = p.orders.find((x) => x.id === s.sheetId);
     const org = this.nameOf(p.organizerId);
     const close = () => this.setState({ sheetId: null });
+    // ① 送り先の ID をコピーして PayPay を開く。PayPay の「送る」→ ID 検索に貼り付ければよい。
+    //    金額は短いので画面を見て入力（下の「金額をコピー」でもコピーできる）
     const openPayPay = async () => {
-      await copy(String(o.price));
+      await copy(p.paypayId);
       this.setState({ sheetOpened: true });
-      this.showToast("¥" + yen(o.price) + " をコピー → 「" + p.paypayId + "」へ送金");
+      this.showToast("ID「" + p.paypayId + "」をコピー → PayPayの「送る」で貼り付けて ¥" + yen(o.price));
       // PayPay アプリを開く（スマホのみ。インストールされていないと開けない）
-      if (isMobile()) setTimeout(() => (location.href = "paypay://"), 600);
+      if (isMobile()) setTimeout(() => (location.href = "paypay://"), 900);
+    };
+    const copyPrice = async () => {
+      await copy(String(o.price));
+      this.showToast("¥" + yen(o.price) + " をコピーしました");
     };
     const report = () =>
       this.act(async () => {
@@ -1267,9 +1277,10 @@ class App extends Component {
             <span style="font-size:12px;color:#7A6A5E">${this.nameOf(o.userId)}さん → ${org}さん</span>
             <span style="font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1.1">¥${yen(o.price)}</span>
             <span style="font-size:12px;color:#7A6A5E">${this.short(o)}</span>
+            <button onClick=${copyPrice} style="margin-top:4px;height:30px;padding:0 12px;border-radius:15px;border:1px solid #D8C2AC;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer">金額をコピー</button>
           </div>
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button onClick=${openPayPay} class="hv-red" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px">1</span>金額をコピーしてPayPayを開く</button>
+            <button onClick=${openPayPay} class="hv-red" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px">1</span>IDをコピーしてPayPayを開く</button>
             <button onClick=${report} aria-disabled=${!s.sheetOpened} style="height:54px;border:1.5px solid ${rb};border-radius:27px;background:#FFFFFF;color:${rf};font-size:15px;font-weight:700;cursor:${s.sheetOpened ? "pointer" : "default"};display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:${rb};color:#FFFFFF;font-size:12px;line-height:22px">2</span>送金しました（報告する）</button>
           </div>
           <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">送り先ID：${p.paypayId}　報告後、${org}さんの確認で「確認済み」になります。</div>

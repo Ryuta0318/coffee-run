@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>メニュー管理 — COFFEE RUN</title>
+<style>
+body{margin:0;background:#F4EEE6;font-family:"Yu Gothic","YuGothic","Noto Sans JP",sans-serif;color:#2A1810}
+main{max-width:720px;margin:0 auto;background:#FFFFFF;min-height:100vh;padding:24px 20px 60px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px}
+h1{font-size:20px;margin:0}
+label{font-size:13px;font-weight:700;color:#2C1710}
+input,select,textarea,button{font-family:inherit;font-size:14px}
+input,select{height:44px;padding:0 12px;border:1px solid #D6CCC0;border-radius:10px;box-sizing:border-box}
+textarea{width:100%;min-height:420px;padding:12px;border:1px solid #D6CCC0;border-radius:10px;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.5}
+button{height:44px;padding:0 20px;border:none;border-radius:22px;background:#EF2027;color:#FFFFFF;font-weight:700;cursor:pointer}
+button.sub{background:#FFFFFF;color:#2C1710;border:1px solid #2C1710}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.note{font-size:12px;color:#7A6A5E;line-height:1.7}
+#msg{font-size:13px;font-weight:700}
+code{background:#F4EEE6;padding:1px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<main>
+  <img src="/assets/coffee-run-logo.svg" alt="COFFEE RUN" style="height:20px;width:auto;align-self:flex-start">
+  <h1>メニュー管理</h1>
+  <div class="note">
+    価格やメニューを直すページです。<code>npx wrangler secret put ADMIN_TOKEN</code> で設定したトークンが必要です。<br>
+    1行が1品です。<code>p</code> はサイズ順の価格（スタバ S/T/G/V、マンモス S/M/L）で、提供がないサイズは <code>null</code>。
+    <code>t</code> は <code>both</code> / <code>HOT</code> / <code>ICED</code>、<code>c</code> はアイコンの色（0 コーヒー / 1 ミルク / 2 ティー / 3 甘い系）、<code>g</code> はカテゴリです。<br>
+    保存すると、すぐに全員の画面に反映されます。すでに入っている注文の金額は変わりません。
+  </div>
+  <div class="row">
+    <input id="tok" type="password" placeholder="ADMIN_TOKEN" autocomplete="off" style="flex:1;min-width:200px">
+    <select id="store"><option value="sbux">スターバックス</option><option value="mammoth">マンモスコーヒー</option></select>
+    <button class="sub" id="load">読み込む</button>
+  </div>
+  <label for="json">メニュー（JSON）</label>
+  <textarea id="json" spellcheck="false"></textarea>
+  <div class="row"><button id="save">保存する</button><span id="msg"></span></div>
+</main>
+<script>
+var $ = function(id){ return document.getElementById(id); };
+var menu = null;
+try{ $('tok').value = sessionStorage.getItem('crAdmin') || ''; }catch(e){}
+function say(t, ok){ $('msg').textContent = t; $('msg').style.color = ok ? '#3F7A3A' : '#A3161B'; }
+function show(){
+  if(!menu) return;
+  $('json').value = '[\n' + menu[$('store').value].map(function(x){ return '  ' + JSON.stringify(x); }).join(',\n') + '\n]';
+}
+async function call(method, body){
+  var tok = $('tok').value.trim();
+  try{ sessionStorage.setItem('crAdmin', tok); }catch(e){}
+  var r = await fetch('/api/admin/menu', { method: method, headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  var j = await r.json().catch(function(){ return {}; });
+  if(!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+$('load').onclick = async function(){
+  try{ menu = (await call('GET')).menu; show(); say('読み込みました', true); }catch(e){ say('読み込めませんでした（' + e.message + '）'); }
+};
+$('store').onchange = show;
+$('save').onclick = async function(){
+  var items;
+  try{ items = JSON.parse($('json').value); }catch(e){ say('JSON の形がまちがっています'); return; }
+  try{ menu = (await call('PUT', { store: $('store').value, items: items })).menu; show(); say('保存しました（' + menu[$('store').value].length + '品）', true); }
+  catch(e){ say('保存できませんでした（' + e.message + '）'); }
+};
+</script>
+</body>
+</html>

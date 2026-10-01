@@ -1,0 +1,34 @@
+/* COFFEE RUN — 見た目はほぼインラインスタイル（デザインのプロトタイプと同じ値）。
+   ここには、インラインで書けない hover / focus / アニメーションだけを置く */
+/* 数字・タイマー用。Google Fonts が遅い・届かない環境でも出るように同梱（SIL OFL） */
+@font-face{font-family:"Archivo Black";font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/archivo-black.woff2) format("woff2")}
+html,body{margin:0}
+body{background:#F4EEE6;font-family:"Yu Gothic","YuGothic","Noto Sans JP",sans-serif;color:#2A1810;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+a{color:#2C1710}a:hover{color:#EF2027}
+input,button,textarea{font-family:inherit}
+button{-webkit-appearance:none;appearance:none}
+input,textarea{color:#2A1810}
+input::placeholder,textarea::placeholder{color:#A09284}
+
+@keyframes crDash{0%{transform:translateX(-120vw) skewX(-20deg);opacity:0}55%{opacity:1}75%{transform:translateX(10px) skewX(-6deg)}100%{transform:none;opacity:1}}
+@keyframes crLine{0%{transform:translateX(-60vw) scaleX(3);opacity:0}70%{opacity:1}100%{transform:none;opacity:1}}
+@keyframes crUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes crFade{to{opacity:0;visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.splash,.splash *{animation-duration:1ms!important;animation-delay:0ms!important}}
+
+/* hover（インラインの値に勝つため !important） */
+@media (hover:hover){
+  .hv-red:hover{background:#C81A20!important}
+  .hv-dim:hover{filter:brightness(0.92)}
+  .hv-dim9:hover{filter:brightness(0.9)}
+  .hv-back:hover{background:#EAE2D8!important}
+  .hv-row:hover{background:#FBF7F2!important}
+  .hv-tint:hover{background:#F3EADF!important}
+  .hv-panel:hover{background:#F4EEE6!important}
+  .hv-txt:hover{color:#EF2027!important}
+  .hv-del:hover{color:#EF2027!important;background:#F3EADF!important}
+  .hv-quick:hover{border-color:#EF2027!important;color:#EF2027!important}
+}
+.inp:focus{border-color:#EF2027!important;box-shadow:0 0 0 3px rgba(239,32,39,0.16)}
+button:focus-visible,a:focus-visible,article:focus-visible{outline:3px solid rgba(239,32,39,0.4);outline-offset:2px}
+.noscroll{scrollbar-width:none}.noscroll::-webkit-scrollbar{display:none}

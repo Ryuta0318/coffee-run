@@ -1,0 +1,23 @@
+// COFFEE RUN（社内コーヒー共同注文・PayPay精算）
+//   npx wrangler dev      ローカルで動かす（http://localhost:8787）
+//   npx wrangler deploy   公開する（まずは coffee-run.<アカウント>.workers.dev）
+{
+  "name": "coffee-run",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application",
+    // /api/* は必ず Worker で処理する
+    "run_worker_first": ["/api/*"]
+  },
+  // PUSH_SUBJECT: Web Push の連絡先（mailto: か https:）。空なら公開URLを使う
+  // ADMIN_TOKEN（メニュー管理用）は secret で設定する: npx wrangler secret put ADMIN_TOKEN
+  "vars": { "PUSH_SUBJECT": "" },
+  "durable_objects": {
+    "bindings": [{ "name": "HUB", "class_name": "Hub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }]
+}

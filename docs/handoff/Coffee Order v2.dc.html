@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/tokens/colors.css">
+<link rel="stylesheet" href="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/tokens/typography.css">
+<link rel="stylesheet" href="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/tokens/effects.css">
+<link rel="stylesheet" href="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/styles.css">
+<script src="_ds/kasumigaseki-capital-design-system-4696333d-dfe1-473b-976a-4af6e14b99cc/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
+<style>
+body{margin:0;background:#F4EEE6;font-family:"Yu Gothic","YuGothic","Noto Sans JP",sans-serif;color:#2A1810;-webkit-font-smoothing:antialiased}
+a{color:#2C1710}a:hover{color:#EF2027}
+input,button,textarea{font-family:inherit}
+@keyframes crDash{0%{transform:translateX(-120vw) skewX(-20deg);opacity:0}55%{opacity:1}75%{transform:translateX(10px) skewX(-6deg)}100%{transform:none;opacity:1}}
+@keyframes crLine{0%{transform:translateX(-60vw) scaleX(3);opacity:0}70%{opacity:1}100%{transform:none;opacity:1}}
+@keyframes crUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes crFade{to{opacity:0;visibility:hidden}}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#F4EEE6;display:flex;justify-content:center;padding:0 0 80px">
+<div data-screen-label="Coffee Run" style="width:100%;max-width:480px;background:#FFFFFF;min-height:100vh;display:flex;flex-direction:column;box-shadow:0 0 0 1px #EAE2D8">
+
+<header style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 12px 20px;gap:12px;border-bottom:1px solid #F4EEE6;position:sticky;top:0;background:#FFFFFF;z-index:6;min-height:44px">
+  <sc-if value="{{ isFeed }}" hint-placeholder-val="{{ true }}">
+    <button onClick="{{ onReplaySplash }}" aria-label="COFFEE RUN" style="border:none;background:transparent;padding:0;cursor:pointer"><img src="assets/coffee-run-logo.svg" alt="COFFEE RUN" style="height:30px;width:auto;display:block"></button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onClick="{{ onCompose }}" style="height:36px;padding:0 16px;border-radius:18px;border:none;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer" style-hover="background:#C81A20">＋ 投稿</button>
+      <button onClick="{{ onProfile }}" aria-label="アカウント" style="width:36px;height:36px;border-radius:50%;border:none;background:{{ meColor }};color:#FFFFFF;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">{{ meInitial }}</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+    <img src="assets/coffee-run-logo.svg" alt="COFFEE RUN" style="height:20px;width:auto;display:block">
+  </sc-if>
+  <sc-if value="{{ isSub }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ onBack }}" style="height:36px;padding:0 14px 0 8px;border-radius:18px;border:none;background:#F4EEE6;color:#2C1710;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:4px" style-hover="background:#EAE2D8"><span style="font-size:16px">‹</span>{{ backLabel }}</button>
+    <img src="assets/coffee-run-logo.svg" alt="COFFEE RUN" style="height:20px;width:auto;display:block">
+  </sc-if>
+</header>
+
+<sc-if value="{{ isFeed }}" hint-placeholder-val="{{ true }}">
+<main data-screen-label="フィード" style="display:flex;flex-direction:column">
+  <button onClick="{{ onCompose }}" style="display:flex;align-items:center;gap:12px;padding:16px 20px;border:none;border-bottom:1px solid #F4EEE6;background:#FFFFFF;cursor:pointer;text-align:left">
+    <span style="width:40px;height:40px;border-radius:50%;background:{{ meColor }};color:#FFFFFF;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ meInitial }}</span>
+    <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:14px;font-weight:700">{{ me }}</span>
+      <span style="font-size:14px;color:#A09284">みんなもコーヒーいるかな？</span>
+    </span>
+    <span style="height:32px;padding:0 14px;border-radius:16px;border:1px solid #D6CCC0;color:#7A6A5E;font-size:12px;font-weight:700;display:flex;align-items:center">投稿</span>
+  </button>
+
+  <div style="display:flex;gap:6px;padding:12px 20px;border-bottom:1px solid #F4EEE6;overflow-x:auto">
+    <sc-for list="{{ filters }}" as="fl" hint-placeholder-count="3">
+      <button onClick="{{ fl.onClick }}" style="height:32px;padding:0 14px;border-radius:16px;border:1px solid {{ fl.bd }};background:{{ fl.bg }};color:{{ fl.fg }};font-size:12px;font-weight:700;cursor:pointer;flex:none">{{ fl.label }}</button>
+    </sc-for>
+  </div>
+
+  <sc-for list="{{ feed }}" as="p" hint-placeholder-count="4">
+    <article onClick="{{ p.onOpen }}" style="display:flex;gap:12px;padding:16px 20px 14px;border-bottom:1px solid #F4EEE6;cursor:pointer;transition:background 160ms ease" style-hover="background:#FBF7F2">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">
+        <span style="width:40px;height:40px;border-radius:50%;background:{{ p.avBg }};color:#FFFFFF;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ p.initial }}</span>
+        <span style="width:2px;flex:1;min-height:12px;background:#F4EEE6;border-radius:1px"></span>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px;font-weight:700">{{ p.organizer }}</span>
+          <span style="font-size:12px;color:#A09284">{{ p.ago }}</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:{{ p.stBg }};color:{{ p.stFg }}">{{ p.stLabel }}</span>
+        </div>
+        <span style="font-size:18px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums">{{ p.title }}</span>
+        <span style="font-size:14px;line-height:1.6;color:#3E2A20;text-wrap:pretty">{{ p.body }}</span>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #EAE2D8;border-radius:12px;margin-top:4px">
+          <span style="width:30px;height:30px;border-radius:50%;background:{{ p.markBg }};color:#FFFFFF;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none">{{ p.mark }}</span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+            <span style="font-size:13px;font-weight:700">{{ p.storeName }}</span>
+            <span style="font-size:11px;color:#7A6A5E;font-variant-numeric:tabular-nums">締切 {{ p.deadline }}・出発 {{ p.depart }}・{{ p.count }}杯</span>
+          </span>
+          <sc-if value="{{ p.hasTimer }}" hint-placeholder-val="{{ false }}">
+            <span style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px;padding-left:10px;border-left:1px dashed #EAE2D8">
+              <span style="font-size:9px;color:#7A6A5E;letter-spacing:0.08em">締切まで</span>
+              <span style="font-size:17px;font-family:'Archivo Black','Noto Sans JP',sans-serif;font-weight:400;color:{{ p.timerFg }};font-variant-numeric:tabular-nums;line-height:1.1">{{ p.timer }}</span>
+            </span>
+          </sc-if>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:2px">
+          <div style="display:flex;align-items:center">
+            <sc-for list="{{ p.avatars }}" as="a" hint-placeholder-count="3">
+              <span style="width:24px;height:24px;border-radius:50%;background:#F3EADF;border:2px solid #FFFFFF;color:#EF2027;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-left:-6px;box-sizing:border-box">{{ a.i }}</span>
+            </sc-for>
+          </div>
+          <span style="font-size:12px;color:#7A6A5E">{{ p.joinText }}</span>
+          <sc-if value="{{ p.isOpen }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center">注文する</span>
+          </sc-if>
+          <sc-if value="{{ p.needsPay }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;border:1px solid #EF2027;color:#EF2027;font-size:12px;font-weight:700;display:flex;align-items:center;box-sizing:border-box">精算する</span>
+          </sc-if>
+        </div>
+      </div>
+    </article>
+  </sc-for>
+  <sc-if value="{{ feedEmpty }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:48px 20px;text-align:center;font-size:13px;color:#A09284">該当する投稿はありません</div>
+  </sc-if>
+</main>
+</sc-if>
+
+<sc-if value="{{ isProfileView }}" hint-placeholder-val="{{ false }}">
+<main data-screen-label="アカウント" style="padding:32px 20px 24px;display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
+    <span style="width:76px;height:76px;border-radius:50%;background:{{ pf.color }};color:#FFFFFF;font-size:30px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:background 160ms ease">{{ pf.initial }}</span>
+    <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <img src="assets/coffee-run-logo.svg" alt="COFFEE RUN" style="width:100%;max-width:280px;height:auto;display:block;margin:4px 0 10px">
+        <span style="font-size:20px;font-weight:700">ようこそ！</span>
+        <span style="font-size:13px;color:#7A6A5E;line-height:1.6">一度登録すれば、名前やPayPay IDの入力は毎回不要です</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+      <span style="font-size:20px;font-weight:700">アカウント</span>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+      <div style="background:#F4EEE6;border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:#7A6A5E">これまでの注文</span><span style="font-size:20px;font-weight:700;font-variant-numeric:tabular-nums">{{ myCount }}<span style="font-size:11px;font-weight:400;margin-left:2px">杯</span></span></div>
+      <div style="background:{{ myDueBg }};border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:#7A6A5E">未払い</span><span style="font-size:20px;font-weight:700;color:{{ myDueFg }};font-variant-numeric:tabular-nums">¥{{ myDue }}</span></div>
+    </div>
+  </sc-if>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">表示名</label>
+    <input value="{{ pf.name }}" onChange="{{ onPfName }}" placeholder="例：山田" style="height:48px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:15px;outline:none" style-focus="border-color:#EF2027;box-shadow:0 0 0 3px rgba(239,32,39,0.16)">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">PayPay ID<span style="font-weight:400;color:#A09284;margin-left:6px">投稿して立て替えるときに使用</span></label>
+    <input value="{{ pf.paypayId }}" onChange="{{ onPfPaypay }}" placeholder="例：yamada-kc" style="height:48px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:15px;outline:none" style-focus="border-color:#EF2027;box-shadow:0 0 0 3px rgba(239,32,39,0.16)">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">アイコンの色</label>
+    <div style="display:flex;gap:12px">
+      <sc-for list="{{ colors }}" as="cl" hint-placeholder-count="5">
+        <button onClick="{{ cl.onClick }}" aria-label="色を選ぶ" style="width:40px;height:40px;border-radius:50%;border:3px solid {{ cl.ring }};padding:3px;background:#FFFFFF;cursor:pointer;box-sizing:border-box"><span style="display:block;width:100%;height:100%;border-radius:50%;background:{{ cl.cl }}"></span></button>
+      </sc-for>
+    </div>
+  </div>
+
+  <button onClick="{{ onPfSave }}" style="height:54px;border:none;border-radius:27px;background:{{ pfBtnBg }};color:#FFFFFF;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px" style-hover="filter:brightness(0.92)">{{ pfBtnLabel }}</button>
+  <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ onLogout }}" style="height:40px;border:none;background:transparent;color:#A09284;font-size:13px;cursor:pointer" style-hover="color:#EF2027">ログアウト</button>
+  </sc-if>
+  <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">登録情報はこの端末に保存されます。</div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isCompose }}" hint-placeholder-val="{{ false }}">
+<main data-screen-label="新規投稿" style="padding:20px;display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;gap:12px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:none">
+      <span style="width:40px;height:40px;border-radius:50%;background:{{ meColor }};color:#FFFFFF;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ draftInitial }}</span>
+      <span style="width:2px;flex:1;background:#EAE2D8;border-radius:1px"></span>
+    </div>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+      <input value="{{ draft.title }}" onChange="{{ onDraftTitle }}" placeholder="10/1（水）" style="border:none;outline:none;font-size:22px;font-weight:700;padding:6px 0 2px;font-variant-numeric:tabular-nums;min-width:0">
+      <textarea value="{{ draft.body }}" onChange="{{ onDraftBody }}" rows="3" placeholder="マンモスコーヒー行きますが皆さんいけますか？" style="border:none;outline:none;resize:none;font-size:15px;line-height:1.6;padding:0;color:#3E2A20"></textarea>
+      <div style="height:1px;background:#D8C2AC"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">どこで買う？</label>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+      <sc-for list="{{ storeCards }}" as="s" hint-placeholder-count="2">
+        <button onClick="{{ s.onClick }}" style="position:relative;text-align:left;padding:16px 14px 14px;border-radius:14px;border:2px solid {{ s.bd }};background:{{ s.bg }};cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:border-color 160ms ease,background 160ms ease">
+          <span style="width:40px;height:40px;border-radius:50%;background:{{ s.markBg }};color:#FFFFFF;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center">{{ s.mark }}</span>
+          <span style="display:flex;flex-direction:column;gap:3px">
+            <span style="font-size:15px;font-weight:700;color:#2A1810">{{ s.label }}</span>
+            <span style="font-size:11px;color:#7A6A5E">{{ s.sub }}</span>
+          </span>
+          <sc-if value="{{ s.on }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">✓</span></sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">注文の締切</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{ deadlines }}" as="d" hint-placeholder-count="5">
+        <button onClick="{{ d.onClick }}" style="height:38px;padding:0 16px;border-radius:19px;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }};font-size:14px;font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums">{{ d.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">出発時間</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{ departs }}" as="d" hint-placeholder-count="4">
+        <button onClick="{{ d.onClick }}" style="height:38px;padding:0 16px;border-radius:19px;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }};font-size:14px;font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums">{{ d.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #EAE2D8;border-radius:14px">
+    <span style="width:36px;height:36px;border-radius:50%;background:{{ meColor }};color:#FFFFFF;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ meInitial }}</span>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+      <span style="font-size:11px;color:#7A6A5E">受取・立替</span>
+      <span style="font-size:14px;font-weight:700">{{ me }}<span style="font-weight:400;color:#2C1710;margin-left:8px;font-size:12px">PayPay ID: {{ accPaypay }}</span></span>
+    </div>
+    <button onClick="{{ onProfile }}" style="height:32px;padding:0 12px;border-radius:16px;border:1px solid #D6CCC0;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer">変更</button>
+  </div>
+
+  <button onClick="{{ onPost }}" style="height:54px;border:none;border-radius:27px;background:{{ postBg }};color:#FFFFFF;font-size:16px;font-weight:700;cursor:pointer" style-hover="filter:brightness(0.92)">{{ postLabel }}</button>
+  <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">投稿すると共有用の文面がコピーされます。Slack・Teamsに貼り付けてください。</div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+<section style="padding:18px 20px 16px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;gap:12px;align-items:flex-start">
+    <span style="width:40px;height:40px;border-radius:50%;background:{{ cur.avBg }};color:#FFFFFF;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ cur.initial }}</span>
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+      <div style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">{{ cur.organizer }}</span><span style="font-size:12px;color:#A09284">{{ cur.ago }}</span></div>
+      <span style="font-size:20px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums">{{ cur.title }}</span>
+      <span style="font-size:14px;line-height:1.6;color:#3E2A20">{{ cur.body }}</span>
+    </div>
+  </div>
+  <div style="background:#F3EADF;border-radius:16px;overflow:hidden">
+    <div style="padding:14px 16px 12px;display:flex;gap:12px;align-items:center">
+      <span style="width:40px;height:40px;border-radius:50%;background:{{ cur.markBg }};color:#FFFFFF;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none">{{ cur.mark }}</span>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:#A0643C">{{ runStatus }}</span>
+        <span style="font-size:15px;font-weight:700">{{ cur.storeName }}</span>
+      </div>
+      <div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <span style="font-size:10px;color:#7A6A5E">{{ timerCaption }}</span>
+        <span style="font-size:26px;font-family:'Archivo Black','Noto Sans JP',sans-serif;font-weight:400;color:{{ timerFg }};font-variant-numeric:tabular-nums;line-height:1">{{ timerText }}</span>
+      </div>
+    </div>
+    <div style="border-top:2px dashed #D8C2AC;margin:0 14px"></div>
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:12px 16px 14px;gap:6px">
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10px;color:#7A6A5E">注文締切</span><span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">{{ cur.deadlineStr }}</span></div>
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10px;color:#7A6A5E">出発</span><span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">{{ cur.departStr }}</span></div>
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10px;color:#7A6A5E">注文</span><span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">{{ cups }}<span style="font-size:11px;font-weight:400;margin-left:2px">杯</span></span></div>
+      <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:10px;color:#7A6A5E">合計</span><span style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums">¥{{ totalStr }}</span></div>
+    </div>
+  </div>
+</section>
+
+<nav style="padding:0 20px 4px;position:sticky;top:60px;background:#FFFFFF;z-index:5">
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:#F4EEE6;border-radius:22px;padding:4px">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+      <button onClick="{{ t.onClick }}" style="height:36px;border:none;border-radius:18px;background:{{ t.bg }};cursor:pointer;font-size:13px;font-weight:700;color:{{ t.fg }};display:flex;justify-content:center;align-items:center;gap:6px;box-shadow:{{ t.sh }};transition:background 160ms ease">
+        {{ t.label }}
+        <sc-if value="{{ t.hasBadge }}" hint-placeholder-val="{{ false }}"><span style="min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:{{ t.badgeBg }};color:#FFFFFF;font-size:10px;line-height:18px;box-sizing:border-box">{{ t.badge }}</span></sc-if>
+      </button>
+    </sc-for>
+  </div>
+</nav>
+</sc-if>
+
+<sc-if value="{{ isOrder }}" hint-placeholder-val="{{ false }}">
+<main data-screen-label="注文する" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:22px">
+  <sc-if value="{{ closed }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#2C1710;color:#FFFFFF;padding:12px 16px;font-size:13px;font-weight:700;border-radius:12px">受付は締め切られました。精算タブから支払いをお願いします。</div>
+  </sc-if>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+    <sc-for list="{{ modes }}" as="md" hint-placeholder-count="2">
+      <button onClick="{{ md.onClick }}" style="position:relative;padding:14px 12px;border-radius:14px;border:2px solid {{ md.bd }};background:{{ md.bg }};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:border-color 160ms ease,background 160ms ease">
+        <span style="font-size:16px;font-weight:800;color:{{ md.fg }}">{{ md.label }}</span>
+        <span style="font-size:11px;color:#7A6A5E">{{ md.sub }}</span>
+      </button>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="width:32px;height:32px;border-radius:50%;background:{{ meColor }};color:#FFFFFF;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ meInitial }}</span>
+      <span style="flex:1;font-size:14px;font-weight:700">{{ me }}さんの注文</span>
+      <sc-if value="{{ hasMine }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#E4F0DB;color:#3F7A3A">注文済み</span></sc-if>
+    </div>
+    <sc-if value="{{ hasLast }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ onUseLast }}" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;border:1.5px dashed #D8C2AC;background:#FFFFFF;cursor:pointer;text-align:left" style-hover="background:#F3EADF">
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#A0643C;color:#FFFFFF;flex:none">いつもの</span>
+        <span style="flex:1;min-width:0;font-size:13px;color:#3E2A20">{{ lastLabel }}</span>
+        <span style="font-size:12px;font-weight:700;color:#EF2027;flex:none">これにする</span>
+      </button>
+    </sc-if>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <label style="font-size:13px;font-weight:700;color:#2C1710">メニュー<span style="font-weight:400;color:#A09284;margin-left:6px">{{ menuCount }}品</span></label>
+      <a href="{{ cur.menuUrl }}" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;color:#EF2027;text-decoration:none;display:flex;align-items:center;gap:4px">{{ cur.storeName }}の公式メニュー ↗</a>
+    </div>
+    <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">
+      <sc-for list="{{ cats }}" as="ct" hint-placeholder-count="5">
+        <button onClick="{{ ct.onClick }}" style="height:30px;padding:0 12px;border-radius:15px;border:1px solid {{ ct.bd }};background:{{ ct.bg }};color:{{ ct.fg }};font-size:12px;font-weight:700;cursor:pointer;flex:none">{{ ct.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+      <sc-for list="{{ menu }}" as="it" hint-placeholder-count="8">
+        <button onClick="{{ it.onClick }}" style="position:relative;display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;border:1.5px solid {{ it.bd }};background:{{ it.bg }};cursor:pointer;text-align:left;transition:border-color 160ms ease,background 160ms ease">
+          <span style="width:48px;height:48px;border-radius:12px;background:{{ it.tint }};flex:none;position:relative;display:block">
+            <span style="position:absolute;left:13px;top:12px;width:20px;height:3px;border-radius:2px;background:{{ it.lid }}"></span>
+            <span style="position:absolute;left:15px;top:14px;width:16px;height:22px;border-radius:2px 2px 7px 7px;background:{{ it.cup }}"></span>
+            <span style="position:absolute;left:15px;top:21px;width:16px;height:5px;background:#FFFFFF;opacity:0.85"></span>
+          </span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+            <span style="font-size:13px;color:#2A1810;font-weight:700;line-height:1.3">{{ it.name }}</span>
+            <span style="font-size:11px;color:#7A6A5E;font-variant-numeric:tabular-nums">{{ it.price }}・{{ it.tempLabel }}</span>
+          </span>
+          <sc-if value="{{ it.on }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#EF2027;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #FFFFFF">✓</span></sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+
+  <sc-if value="{{ isOther }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:8px;background:#F3EADF;padding:12px;border-radius:14px">
+      <input value="{{ form.otherName }}" onChange="{{ onOtherName }}" placeholder="ドリンク名（季節限定など）" style="height:44px;padding:0 12px;border:1px solid #D8C2AC;border-radius:10px;font-size:14px;outline:none;min-width:0;background:#FFFFFF">
+      <input value="{{ form.otherPrice }}" onChange="{{ onOtherPrice }}" inputmode="numeric" placeholder="金額" style="height:44px;padding:0 12px;border:1px solid #D8C2AC;border-radius:10px;font-size:14px;outline:none;min-width:0;background:#FFFFFF">
+    </div>
+  </sc-if>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label style="font-size:13px;font-weight:700;color:#2C1710">サイズ</label>
+      <div style="display:flex;gap:6px">
+        <sc-for list="{{ sizes }}" as="z" hint-placeholder-count="4">
+          <button onClick="{{ z.onClick }}" style="flex:1;height:44px;border-radius:22px;border:1px solid {{ z.bd }};background:{{ z.bg }};color:{{ z.fg }};font-size:14px;font-weight:700;cursor:{{ z.cursor }};opacity:{{ z.op }}">{{ z.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label style="font-size:13px;font-weight:700;color:#2C1710">温度</label>
+      <div style="display:flex;gap:6px">
+        <sc-for list="{{ temps }}" as="z" hint-placeholder-count="2">
+          <button onClick="{{ z.onClick }}" style="flex:1;height:44px;border-radius:22px;border:1px solid {{ z.bd }};background:{{ z.bg }};color:{{ z.fg }};font-size:13px;font-weight:700;cursor:{{ z.cursor }};opacity:{{ z.op }}">{{ z.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <label style="font-size:13px;font-weight:700;color:#2C1710">カスタム・メモ<span style="font-weight:400;color:#A09284;margin-left:6px">任意</span></label>
+    <input value="{{ form.note }}" onChange="{{ onNote }}" placeholder="例：オーツミルク変更 / 氷少なめ" style="height:46px;padding:0 14px;border:1px solid #D6CCC0;border-radius:10px;font-size:14px;outline:none" style-focus="border-color:#EF2027;box-shadow:0 0 0 3px rgba(239,32,39,0.16)">
+  </div>
+
+  <div style="display:flex;align-items:center;gap:14px;padding-top:4px">
+    <div style="display:flex;flex-direction:column">
+      <span style="font-size:11px;color:#A09284">お支払い額</span>
+      <span style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">¥{{ formPrice }}</span>
+    </div>
+    <button onClick="{{ onSubmit }}" style="flex:1;height:52px;border:none;border-radius:26px;background:{{ submitBg }};color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer" style-hover="filter:brightness(0.92)">{{ submitLabel }}</button>
+  </div>
+  <div style="font-size:11px;color:#A09284;line-height:1.6">脚注：{{ priceNote }}</div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+<main data-screen-label="注文一覧" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:20px">
+  <sc-if value="{{ hasGoers }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px dashed #D8C2AC;border-radius:14px">
+      <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#EF2027;color:#FFFFFF;flex:none">一緒に行く</span>
+      <span style="font-size:13px;font-weight:700">{{ goers }}</span>
+    </div>
+  </sc-if>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span style="font-size:13px;font-weight:700;color:#2C1710">オンライン注文用まとめ</span>
+      <span style="font-size:11px;color:#A09284">同じ注文は自動で集計</span>
+    </div>
+    <div style="background:#F4EEE6;padding:4px 16px;border-radius:14px">
+      <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px dashed #D6CCC0">
+          <span style="flex:1;font-size:14px">{{ g.label }}</span>
+          <span style="min-width:34px;height:24px;padding:0 8px;border-radius:12px;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;box-sizing:border-box;font-variant-numeric:tabular-nums">×{{ g.qty }}</span>
+        </div>
+      </sc-for>
+      <sc-if value="{{ noOrders }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:28px 0;display:flex;flex-direction:column;align-items:center;gap:10px">
+          <span style="position:relative;width:44px;height:44px;display:block">
+            <span style="position:absolute;left:10px;top:0;width:4px;height:10px;border-radius:2px;background:#D8C2AC"></span>
+            <span style="position:absolute;left:18px;top:2px;width:4px;height:8px;border-radius:2px;background:#E7D6C4"></span>
+            <span style="position:absolute;left:26px;top:0;width:4px;height:10px;border-radius:2px;background:#D8C2AC"></span>
+            <span style="position:absolute;left:2px;top:14px;width:34px;height:4px;border-radius:2px;background:#B5A897"></span>
+            <span style="position:absolute;left:5px;top:17px;width:28px;height:26px;border-radius:3px 3px 14px 14px;background:#D6CCC0"></span>
+            <span style="position:absolute;left:28px;top:21px;width:14px;height:14px;border:4px solid #D6CCC0;border-radius:50%;box-sizing:border-box"></span>
+          </span>
+          <span style="font-size:13px;color:#A09284">まだ注文がありません</span>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+      <button onClick="{{ onCopy }}" style="height:46px;border:1px solid #2C1710;background:#FFFFFF;color:#2C1710;border-radius:23px;font-size:14px;font-weight:700;cursor:pointer" style-hover="background:#F4EEE6">注文内容をコピー</button>
+      <button onClick="{{ onToggleClose }}" style="height:46px;border:none;background:#2C1710;color:#FFFFFF;border-radius:23px;font-size:14px;font-weight:700;cursor:pointer" style-hover="filter:brightness(0.9)">{{ closeLabel }}</button>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <span style="font-size:13px;font-weight:700;color:#2C1710">個別の注文（受け取り時の確認用）</span>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <sc-for list="{{ orders }}" as="o" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border:1px solid #EAE2D8;border-radius:14px">
+          <span style="width:38px;height:38px;border-radius:50%;background:#F3EADF;color:#EF2027;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ o.initial }}</span>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="display:flex;align-items:center;gap:6px"><span style="font-size:14px;font-weight:700">{{ o.name }}</span><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:9px;background:{{ o.mdBg }};color:{{ o.mdFg }}">{{ o.mdLabel }}</span></span>
+            <span style="font-size:12px;color:#7A6A5E">{{ o.line }}</span>
+            <sc-if value="{{ o.hasNote }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#A0643C">{{ o.note }}</span></sc-if>
+          </div>
+          <span style="font-size:14px;font-variant-numeric:tabular-nums">¥{{ o.priceStr }}</span>
+          <button onClick="{{ o.onDelete }}" aria-label="削除" style="width:32px;height:32px;border:none;border-radius:50%;background:transparent;color:#B5A897;font-size:18px;cursor:pointer" style-hover="color:#EF2027;background:#F3EADF">×</button>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isPay }}" hint-placeholder-val="{{ false }}">
+<main data-screen-label="精算" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <span style="font-size:13px;font-weight:700;color:#2C1710">回収状況</span>
+      <span style="font-size:13px;font-variant-numeric:tabular-nums"><span style="font-size:22px;font-weight:700">¥{{ paidStr }}</span><span style="color:#A09284"> / ¥{{ totalStr }}</span></span>
+    </div>
+    <div style="height:10px;background:#EAE2D8;border-radius:5px;overflow:hidden"><div style="height:100%;width:{{ progress }};background:#EF2027;border-radius:5px;transition:width 300ms ease"></div></div>
+    <div style="display:flex;gap:16px;font-size:12px;color:#7A6A5E">
+      <span>確認済み {{ cntDone }}</span><span>報告あり {{ cntReported }}</span><span style="color:#A3161B;font-weight:700">未払い {{ cntUnpaid }}</span>
+    </div>
+  </div>
+
+  <sc-if value="{{ allPaid }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#E4F0DB;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+      <span style="width:32px;height:32px;border-radius:50%;background:#3F7A3A;color:#FFFFFF;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">✓</span>
+      <span style="font-size:14px;font-weight:700;color:#3F7A3A">全員の支払いが完了しました</span>
+    </div>
+  </sc-if>
+
+  <div style="background:#F3EADF;padding:14px 16px;border-radius:14px;display:flex;flex-direction:column;gap:4px">
+    <span style="font-size:11px;color:#7A6A5E">PayPay送金先（投稿者）</span>
+    <span style="font-size:15px;font-weight:700">{{ cur.organizer }}　<span style="font-weight:400;color:#2C1710">ID: {{ cur.paypayId }}</span></span>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <sc-for list="{{ orders }}" as="o" hint-placeholder-count="4">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border:1px solid #EAE2D8;border-radius:14px">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <span style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:700">{{ o.name }}</span><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:{{ o.stBg }};color:{{ o.stFg }}">{{ o.stLabel }}</span></span>
+          <span style="font-size:12px;color:#7A6A5E">{{ o.short }}・¥{{ o.priceStr }}</span>
+        </div>
+        <sc-if value="{{ o.canPay }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ o.onPay }}" style="height:40px;padding:0 16px;border:none;border-radius:20px;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer" style-hover="background:#C81A20">PayPayで払う</button>
+        </sc-if>
+        <sc-if value="{{ o.canConfirm }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ o.onConfirm }}" style="height:40px;padding:0 16px;border:1px solid #2C1710;border-radius:20px;background:#FFFFFF;color:#2C1710;font-size:13px;font-weight:700;cursor:pointer" style-hover="background:#F4EEE6">入金を確認</button>
+        </sc-if>
+        <sc-if value="{{ o.isDone }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ o.onUndo }}" style="height:40px;padding:0 10px;border:none;background:transparent;color:#A09284;font-size:12px;cursor:pointer">取り消す</button>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <button onClick="{{ onRemind }}" style="height:50px;border:none;border-radius:25px;background:{{ remindBg }};color:#FFFFFF;font-size:14px;font-weight:700;cursor:pointer" style-hover="filter:brightness(0.92)">{{ remindLabel }}</button>
+  <div style="font-size:11px;color:#A09284;line-height:1.6">脚注：リマインド文はクリップボードにコピーされます。Slack・Teams等に貼り付けて送信してください。</div>
+</main>
+</sc-if>
+
+<sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
+<main data-screen-label="チャット" style="padding:18px 20px 0;display:flex;flex-direction:column;gap:14px;flex:1">
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <sc-for list="{{ msgs }}" as="m" hint-placeholder-count="3">
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-direction:{{ m.dir }}">
+        <sc-if value="{{ m.showAv }}" hint-placeholder-val="{{ true }}"><span style="width:30px;height:30px;border-radius:50%;background:{{ m.av }};color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">{{ m.initial }}</span></sc-if>
+        <div style="display:flex;flex-direction:column;gap:3px;max-width:75%;align-items:{{ m.align }}">
+          <sc-if value="{{ m.showName }}" hint-placeholder-val="{{ true }}"><span style="font-size:11px;color:#7A6A5E">{{ m.name }}</span></sc-if>
+          <span style="padding:10px 14px;border-radius:{{ m.radius }};background:{{ m.bg }};color:{{ m.fg }};font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word">{{ m.text }}</span>
+          <span style="font-size:10px;color:#A09284;font-variant-numeric:tabular-nums">{{ m.time }}</span>
+        </div>
+      </div>
+    </sc-for>
+    <sc-if value="{{ noMsgs }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:36px 0;text-align:center;font-size:13px;color:#A09284;line-height:1.7">まだメッセージはありません。<br>集合場所や追加の注文はここで相談しよう</div>
+    </sc-if>
+  </div>
+  <div style="position:sticky;bottom:0;background:#FFFFFF;padding:10px 0 16px;margin-top:auto;display:flex;flex-direction:column;gap:8px;border-top:1px solid #F4EEE6">
+    <div style="display:flex;gap:6px;overflow-x:auto">
+      <sc-for list="{{ quick }}" as="q" hint-placeholder-count="4">
+        <button onClick="{{ q.onClick }}" style="height:30px;padding:0 12px;border-radius:15px;border:1px solid #D6CCC0;background:#FFFFFF;color:#3E2A20;font-size:12px;cursor:pointer;flex:none" style-hover="border-color:#EF2027;color:#EF2027">{{ q.label }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input value="{{ chatText }}" onChange="{{ onChatText }}" onKeyDown="{{ onChatKey }}" placeholder="メッセージを入力" style="flex:1;min-width:0;height:44px;padding:0 16px;border:1px solid #D6CCC0;border-radius:22px;font-size:14px;outline:none;background:#FBF7F2" style-focus="border-color:#EF2027;box-shadow:0 0 0 3px rgba(239,32,39,0.16)">
+      <button onClick="{{ onSend }}" aria-label="送信" style="width:44px;height:44px;border-radius:50%;border:none;background:{{ sendBg }};color:#FFFFFF;font-size:18px;font-weight:700;cursor:pointer;flex:none">↑</button>
+    </div>
+  </div>
+</main>
+</sc-if>
+
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ onCloseSheet }}" style="position:fixed;inset:0;background:rgba(26,26,26,0.45);z-index:20;display:flex;align-items:flex-end;justify-content:center">
+  <div onClick="{{ stop }}" style="width:100%;max-width:480px;background:#FFFFFF;border-radius:22px 22px 0 0;padding:12px 20px 28px;display:flex;flex-direction:column;gap:16px;box-sizing:border-box">
+    <div style="width:40px;height:4px;border-radius:2px;background:#EAE2D8;align-self:center"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:17px;font-weight:700">PayPayで支払う</span>
+      <button onClick="{{ onCloseSheet }}" style="width:36px;height:36px;border:none;border-radius:50%;background:#F4EEE6;font-size:18px;color:#7A6A5E;cursor:pointer">×</button>
+    </div>
+    <div style="background:#F3EADF;border-radius:16px;padding:20px 16px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px">
+      <span style="position:relative;width:28px;height:28px;display:block">
+        <span style="position:absolute;left:6px;top:0;width:3px;height:7px;border-radius:2px;background:#D8C2AC"></span>
+        <span style="position:absolute;left:11px;top:1px;width:3px;height:6px;border-radius:2px;background:#E7D6C4"></span>
+        <span style="position:absolute;left:16px;top:0;width:3px;height:7px;border-radius:2px;background:#D8C2AC"></span>
+        <span style="position:absolute;left:1px;top:9px;width:22px;height:3px;border-radius:2px;background:#C81A20"></span>
+        <span style="position:absolute;left:3px;top:11px;width:18px;height:16px;border-radius:2px 2px 9px 9px;background:#EF2027"></span>
+        <span style="position:absolute;left:18px;top:13px;width:9px;height:9px;border:3px solid #EF2027;border-radius:50%;box-sizing:border-box"></span>
+      </span>
+      <span style="font-size:12px;color:#7A6A5E">{{ sheet.name }}さん → {{ cur.organizer }}さん</span>
+      <span style="font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1.1">¥{{ sheet.priceStr }}</span>
+      <span style="font-size:12px;color:#7A6A5E">{{ sheet.short }}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button onClick="{{ onOpenPayPay }}" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px" style-hover="background:#C81A20"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px">1</span>金額をコピーしてPayPayを開く</button>
+      <button onClick="{{ onReport }}" style="height:54px;border:1.5px solid {{ reportBd }};border-radius:27px;background:#FFFFFF;color:{{ reportFg }};font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:{{ reportBd }};color:#FFFFFF;font-size:12px;line-height:22px">2</span>送金しました（報告する）</button>
+    </div>
+    <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">送り先ID：{{ cur.paypayId }}　報告後、{{ cur.organizer }}さんの確認で「確認済み」になります。</div>
+  </div>
+</div>
+</sc-if>
+
+{{ splash }}
+
+<sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2A1810;color:#FFFFFF;padding:10px 18px 10px 10px;border-radius:24px;font-size:13px;z-index:30;max-width:90vw;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:flex;align-items:center;gap:10px">
+    <span style="width:26px;height:26px;border-radius:50%;background:#EF2027;display:flex;align-items:center;justify-content:center;flex:none;font-size:12px;font-weight:700">✓</span>
+    <span>{{ toast }}</span>
+  </div>
+</sc-if>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;feed&quot;,&quot;detail&quot;],&quot;default&quot;:&quot;feed&quot;,&quot;tsType&quot;:&quot;'feed' | 'detail'&quot;,&quot;section&quot;:&quot;表示&quot;},&quot;showSplash&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;表示&quot;}}">
+class Component extends DCLogic {
+  // c: 0 coffee / 1 milk / 2 tea·green / 3 sweet
+  STORES = {
+    sbux: { label: 'スターバックス', sub: 'モバイルオーダー', mark: 'S', markBg: '#2C1710', sizes: ['S','T','G','V'], url: 'https://product.starbucks.co.jp/beverage/',
+      note: '2026年2月改定時の価格（参考）。季節限定は「その他」から入力。', cats: ['コーヒー','エスプレッソ','フラペチーノ','ティー','その他'], items: [
+      { id: 'drip', g: 'コーヒー', name: 'ドリップ コーヒー', p: [394,440,485,530], t: 'both', c: 0 },
+      { id: 'cold', g: 'コーヒー', name: 'コールドブリュー', p: [451,490,535,580], t: 'ICED', c: 0 },
+      { id: 'misto', g: 'コーヒー', name: 'カフェ ミスト', p: [449,495,540,585], t: 'HOT', c: 1 },
+      { id: 'latte', g: 'エスプレッソ', name: 'スターバックス ラテ', p: [460,500,545,590], t: 'both', c: 1 },
+      { id: 'americano', g: 'エスプレッソ', name: 'カフェ アメリカーノ', p: [451,490,535,580], t: 'both', c: 0 },
+      { id: 'cappuccino', g: 'エスプレッソ', name: 'カプチーノ', p: [460,500,545,590], t: 'HOT', c: 1 },
+      { id: 'mocha', g: 'エスプレッソ', name: 'カフェ モカ', p: [505,545,590,635], t: 'both', c: 3 },
+      { id: 'whitemocha', g: 'エスプレッソ', name: 'ホワイト モカ', p: [505,545,590,635], t: 'both', c: 3 },
+      { id: 'caramel', g: 'エスプレッソ', name: 'キャラメル マキアート', p: [520,560,605,650], t: 'both', c: 3 },
+      { id: 'honeyoat', g: 'エスプレッソ', name: 'ハニー オーツ ラテ', p: [520,560,605,650], t: 'both', c: 1 },
+      { id: 'fcoffee', g: 'フラペチーノ', name: 'コーヒー フラペチーノ', p: [null,525,570,615], t: 'ICED', c: 0 },
+      { id: 'fcaramel', g: 'フラペチーノ', name: 'キャラメル フラペチーノ', p: [null,560,605,650], t: 'ICED', c: 3 },
+      { id: 'fmatcha', g: 'フラペチーノ', name: '抹茶 クリーム フラペチーノ', p: [null,560,605,650], t: 'ICED', c: 2 },
+      { id: 'fdark', g: 'フラペチーノ', name: 'ダーク モカ チップ フラペチーノ', p: [null,560,605,650], t: 'ICED', c: 3 },
+      { id: 'fvanilla', g: 'フラペチーノ', name: 'バニラ クリーム フラペチーノ', p: [null,525,570,615], t: 'ICED', c: 1 },
+      { id: 'icedtea', g: 'ティー', name: 'アイス ティー', p: [445,485,530,575], t: 'ICED', c: 2 },
+      { id: 'yuzu', g: 'ティー', name: 'ゆず シトラス ＆ ティー', p: [495,540,585,630], t: 'both', c: 2 },
+      { id: 'matcha', g: 'ティー', name: '抹茶 ティー ラテ', p: [505,545,590,635], t: 'both', c: 2 },
+      { id: 'chai', g: 'ティー', name: 'チャイ ティー ラテ', p: [505,545,590,635], t: 'both', c: 1 },
+      { id: 'earl', g: 'ティー', name: 'アールグレイ ティー ラテ', p: [480,520,565,610], t: 'both', c: 2 },
+      { id: 'hojicha', g: 'ティー', name: 'ほうじ茶 ティー ラテ', p: [505,545,590,635], t: 'both', c: 1 },
+      { id: 'chamomile', g: 'ティー', name: 'カモミール ティー ラテ', p: [480,520,565,610], t: 'HOT', c: 2 },
+      { id: 'cocoa', g: 'その他', name: 'ココア', p: [450,490,535,580], t: 'both', c: 3 },
+      { id: 'steamed', g: 'その他', name: 'スチーム ミルク', p: [380,420,465,510], t: 'HOT', c: 1 }
+    ]},
+    mammoth: { label: 'マンモスコーヒー', sub: 'モバイルオーダー', mark: 'M', markBg: '#EF2027', sizes: ['S','M','L'], url: 'https://mmth.co.jp/menu',
+      note: '虎ノ門店の報道価格等（参考）。提供のないサイズは選べません。', cats: ['コーヒー','ラテ','シグネチャー','ティー・ソーダ','フラッペ'], items: [
+      { id: 'americano', g: 'コーヒー', name: 'アメリカーノ', p: [190,250,400], t: 'both', c: 0 },
+      { id: 'decafmocha', g: 'コーヒー', name: 'ディカフェヘーゼルナッツモカ', p: [460,500,null], t: 'both', c: 3 },
+      { id: 'latte', g: 'ラテ', name: 'カフェラテ', p: [310,380,600], t: 'both', c: 1 },
+      { id: 'honey', g: 'ラテ', name: 'ハニーラテ', p: [360,430,null], t: 'both', c: 1 },
+      { id: 'vanilla', g: 'ラテ', name: 'バニララテ', p: [360,430,650], t: 'both', c: 1 },
+      { id: 'mocha', g: 'ラテ', name: 'カフェモカ', p: [410,480,700], t: 'both', c: 3 },
+      { id: 'caramel', g: 'ラテ', name: 'キャラメルマキアート', p: [410,480,700], t: 'both', c: 3 },
+      { id: 'oat', g: 'ラテ', name: '穀物オーツラテ', p: [410,480,null], t: 'both', c: 1 },
+      { id: 'matcha', g: 'ラテ', name: '抹茶ラテ', p: [410,480,null], t: 'both', c: 2 },
+      { id: 'choco', g: 'ラテ', name: 'チョコラテ', p: [380,450,null], t: 'both', c: 3 },
+      { id: 'snow', g: 'シグネチャー', name: 'スノーマンモス', p: [380,450,null], t: 'ICED', c: 3 },
+      { id: 'dalgona', g: 'シグネチャー', name: 'ダルゴナラテ', p: [410,480,700], t: 'ICED', c: 3 },
+      { id: 'sweetpotato', g: 'シグネチャー', name: 'さつまいもラテ', p: [410,480,null], t: 'both', c: 3 },
+      { id: 'earl', g: 'ティー・ソーダ', name: 'アールグレイティー', p: [360,430,null], t: 'both', c: 2 },
+      { id: 'yuzu', g: 'ティー・ソーダ', name: 'ゆずソーダ', p: [360,430,null], t: 'ICED', c: 2 },
+      { id: 'mintchoco', g: 'フラッペ', name: 'ミントチョコフラッペ', p: [480,580,null], t: 'ICED', c: 2 },
+      { id: 'cookie', g: 'フラッペ', name: 'クッキーフラッペ', p: [480,580,null], t: 'ICED', c: 3 }
+    ]}
+  };
+  OTHER = { id: '_other', g: 'その他', name: 'その他のドリンク', p: [null], t: 'both', c: 3 };
+  TINT = [['#EAE2D8','#2C1710','#2A1810'], ['#F3EADF','#E7D6C4','#A0643C'], ['#E4F0DB','#A9D18E','#3F7A3A'], ['#F3EADF','#C49A78','#C81A20']];
+  MEMBERS = ['佐藤','鈴木','高橋','田中','伊藤','渡辺','山本'];
+  AV = { '山田': '#EF2027', '佐藤': '#A0643C', '鈴木': '#2C1710', '高橋': '#C49A78' };
+  uid = 100;
+  MIN = 60000;
+  dayTitle(d) { return (d.getMonth() + 1) + '/' + d.getDate() + '（' + '日月火水木金土'[d.getDay()] + '）'; }
+  dayAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return this.dayTitle(d); }
+  at(n, hh, mm) { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(hh, mm, 0, 0); return d.getTime(); }
+  hm(ms) { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  bodyFor(store) { return this.STORES[store].label + '行きますが皆さんいけますか？'; }
+  slots() { const q = 15 * this.MIN; const base = Math.ceil(Date.now() / q) * q + q; return [0, 1, 2, 3, 5].map(i => base + i * q); }
+
+  loadAcc() { try { return JSON.parse(localStorage.getItem('coffeeRun.account') || 'null'); } catch (e) { return null; } }
+  saveAcc(a) { try { a ? localStorage.setItem('coffeeRun.account', JSON.stringify(a)) : localStorage.removeItem('coffeeRun.account'); } catch (e) {} }
+  state = (() => {
+    const now = Date.now(), dl = now + 18 * this.MIN + 40000, acc = this.loadAcc();
+    return {
+      now, account: acc, pf: acc ? { ...acc } : { name: '', paypayId: '', color: '#EF2027' },
+      view: acc ? (this.props.startView ?? 'feed') : 'signup', activeId: 1, filter: 'all',
+      tab: 'order', sheetId: null, sheetOpened: false, toast: '', draft: null,
+      splash: this.props.showSplash ?? true, splashKey: 0, chatText: '',
+      form: { name: '', mode: 'ask', cat: 'all', itemId: 'latte', size: 1, temp: 'HOT', note: '', otherName: '', otherPrice: '' },
+      posts: [
+        { id: 1, organizer: '山田', paypayId: 'yamada-kc', title: this.dayAgo(0), ago: '12分前', store: 'mammoth', body: 'マンモスコーヒー行きますが皆さんいけますか？', deadline: dl, depart: dl + 10 * this.MIN, closed: false, msgs: [
+          { id: 1, name: '佐藤', text: 'オーツミルクでお願いします！', ts: now - 10 * this.MIN },
+          { id: 2, name: '鈴木', text: 'Lサイズのアメリカーノで！払いました〜', ts: now - 7 * this.MIN },
+          { id: 3, name: '山田', text: '了解です！出発前に1階エントランス集合で', ts: now - 4 * this.MIN },
+          { id: 4, name: '佐藤', text: '一緒に行きます〜', ts: now - 2 * this.MIN }
+        ], orders: [
+          { id: 11, name: '佐藤', mode: 'go', itemId: 'latte', size: 1, temp: 'ICED', note: 'オーツミルク', status: 'done' },
+          { id: 12, name: '鈴木', mode: 'ask', itemId: 'americano', size: 2, temp: 'ICED', note: '', status: 'reported' },
+          { id: 13, name: '高橋', mode: 'ask', itemId: 'dalgona', size: 1, temp: 'ICED', note: '', status: 'unpaid' }
+        ]},
+        { id: 2, organizer: '佐藤', paypayId: 'sato-kc', title: this.dayAgo(1), ago: '1日前', store: 'sbux', body: '午後イチでスタバ行きます〜！新作も頼めます', deadline: this.at(1, 13, 30), depart: this.at(1, 13, 45), closed: true, msgs: [
+          { id: 1, name: '田中', text: '支払い遅れてすみません、今日中に送ります！', ts: this.at(1, 15, 2) }
+        ], orders: [
+          { id: 21, name: '山田', mode: 'ask', itemId: 'latte', size: 1, temp: 'HOT', note: '', status: 'done' },
+          { id: 22, name: '田中', mode: 'ask', itemId: 'earl', size: 1, temp: 'HOT', note: '甘さ控えめ', status: 'unpaid' },
+          { id: 23, name: '伊藤', mode: 'go', itemId: 'cold', size: 2, temp: 'ICED', note: '', status: 'done' },
+          { id: 24, name: '渡辺', mode: 'ask', itemId: 'drip', size: 1, temp: 'HOT', note: '', status: 'done' }
+        ]},
+        { id: 3, organizer: '鈴木', paypayId: 'suzuki-kc', title: this.dayAgo(2), ago: '2日前', store: 'mammoth', body: '朝マンモス行く人〜', deadline: this.at(2, 9, 45), depart: this.at(2, 10, 0), closed: true, orders: [
+          { id: 31, name: '山田', mode: 'go', itemId: 'americano', size: 2, temp: 'ICED', note: '', status: 'done' },
+          { id: 32, name: '佐藤', mode: 'ask', itemId: 'snow', size: 1, temp: 'ICED', note: '', status: 'done' }
+        ]},
+        { id: 4, organizer: '山田', paypayId: 'yamada-kc', title: this.dayAgo(5), ago: '5日前', store: 'sbux', body: '会議前にスタバ寄ります。11時までに！', deadline: this.at(5, 11, 0), depart: this.at(5, 11, 10), closed: true, orders: [
+          { id: 41, name: '高橋', mode: 'ask', itemId: 'mocha', size: 1, temp: 'HOT', note: '', status: 'done' },
+          { id: 42, name: '鈴木', mode: 'ask', itemId: 'americano', size: 1, temp: 'HOT', note: '', status: 'done' },
+          { id: 43, name: '山本', mode: 'go', itemId: 'latte', size: 2, temp: 'ICED', note: 'ソイミルク', status: 'done' }
+        ]}
+      ]
+    };
+  })();
+  componentDidMount() { this.iv = setInterval(() => this.setState({ now: Date.now() }), 1000); if (this.state.splash) this.st = setTimeout(() => this.setState({ splash: false }), 2400); }
+  replaySplash() { clearTimeout(this.st); this.setState(s => ({ splash: true, splashKey: s.splashKey + 1 })); this.st = setTimeout(() => this.setState({ splash: false }), 2400); }
+  sendMsg(text) { const t = (text || '').trim(); if (!t) return; const a = this.state.account || {}; this.updPost(p => ({ ...p, msgs: [...(p.msgs || []), { id: ++this.uid, name: a.name || 'ゲスト', text: t, ts: Date.now() }] })); this.setState({ chatText: '' }); }
+  componentWillUnmount() { clearTimeout(this.tt); clearTimeout(this.st); clearInterval(this.iv); }
+  showToast(t) { clearTimeout(this.tt); this.setState({ toast: t }); this.tt = setTimeout(() => this.setState({ toast: '' }), 2400); }
+  copy(t) { try { navigator.clipboard && navigator.clipboard.writeText(t); } catch (e) {} }
+  yen(n) { return (n || 0).toLocaleString('ja-JP'); }
+  setForm(p) { this.setState(s => ({ form: { ...s.form, ...p } })); }
+  setDraft(p) { this.setState(s => ({ draft: { ...s.draft, ...p } })); }
+  updPost(fn) { this.setState(s => ({ posts: s.posts.map(p => p.id === s.activeId ? fn(p) : p) })); }
+  setStatus(id, status) { this.updPost(p => ({ ...p, orders: p.orders.map(o => o.id === id ? { ...o, status } : o) })); }
+  newDraft() { const store = 'mammoth', sl = this.slots(), a = this.state.account || {}; return { organizer: a.name || '', paypayId: a.paypayId || '', title: this.dayAgo(0), store, body: this.bodyFor(store), bodyEdited: false, deadline: sl[1], departOff: 10 }; }
+  countdown(ms) {
+    if (ms <= 0) return '0:00';
+    const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') : m + ':' + String(s).padStart(2, '0');
+  }
+
+  calc(p) {
+    const st = this.STORES[p.store];
+    const item = id => id === '_other' ? this.OTHER : (st.items.find(i => i.id === id) || st.items[0]);
+    const fit = (ps, sz) => { let i = Math.min(sz, ps.length - 1); while (i > 0 && ps[i] == null) i--; if (ps[i] == null) i = ps.findIndex(x => x != null); return i; };
+    const price = o => o.itemId === '_other' ? (o.customPrice || 0) : item(o.itemId).p[fit(item(o.itemId).p, o.size)];
+    const short = o => o.itemId === '_other' ? o.customName + ' ' + o.temp : item(o.itemId).name + ' ' + st.sizes[fit(item(o.itemId).p, o.size)] + ' ' + o.temp;
+    const total = p.orders.reduce((a, o) => a + price(o), 0);
+    const unpaid = p.orders.filter(o => o.status === 'unpaid');
+    const reported = p.orders.filter(o => o.status === 'reported');
+    return { st, item, fit, price, short, total, unpaid, reported };
+  }
+
+  renderVals() {
+    const s = this.state, f = s.form, RED = '#EF2027', SL = '#2C1710', now = s.now;
+    const sel = on => on ? { bg: '#F3EADF', fg: RED, bd: RED } : { bg: '#FFFFFF', fg: '#3E2A20', bd: '#D6CCC0' };
+    const view = s.view === 'compose' && !s.draft ? 'feed' : s.view;
+    const acc = s.account || { name: '', paypayId: '', color: '#EF2027' };
+    const avc = n => n === acc.name ? acc.color : (this.AV[n] || '#C49A78');
+    const isLocked = p => p.closed || now >= p.deadline;
+    const postStatus = (p, c) => !isLocked(p) ? ['募集中', '#F3EADF', '#A0643C']
+      : (c.unpaid.length + c.reported.length) ? ['未精算 ' + (c.unpaid.length + c.reported.length), '#FBE6E4', '#A3161B'] : ['完了', '#E4F0DB', '#3F7A3A'];
+    const tFg = p => (p.deadline - now) < 5 * this.MIN ? '#A3161B' : '#2A1810';
+
+    const feedAll = s.posts.map(p => { const c = this.calc(p); return { p, c, stx: postStatus(p, c) }; });
+    const filtered = feedAll.filter(x => s.filter === 'all' || (s.filter === 'open' ? !isLocked(x.p) : (x.c.unpaid.length + x.c.reported.length) > 0));
+    const feed = filtered.map(({ p, c, stx }) => {
+      const goN = p.orders.filter(o => o.mode === 'go').length;
+      return {
+        organizer: p.organizer, initial: p.organizer.slice(0, 1), avBg: avc(p.organizer), ago: p.ago,
+        title: p.title, body: p.body, storeName: c.st.label, mark: c.st.mark, markBg: c.st.markBg,
+        deadline: this.hm(p.deadline), depart: this.hm(p.depart), count: p.orders.length,
+        stLabel: stx[0], stBg: stx[1], stFg: stx[2],
+        hasTimer: !isLocked(p), timer: this.countdown(p.deadline - now), timerFg: tFg(p),
+        avatars: p.orders.slice(0, 4).map(o => ({ i: o.name.slice(0, 1) })),
+        joinText: (p.orders.length ? p.orders.length + '人が注文' + (goN ? '・' + goN + '人同行' : '') : 'まだ注文なし') + ((p.msgs || []).length ? '・コメント' + p.msgs.length : ''),
+        isOpen: !isLocked(p), needsPay: isLocked(p) && c.unpaid.length > 0,
+        onOpen: () => this.setState({ view: 'detail', activeId: p.id, tab: isLocked(p) ? 'pay' : 'order', form: { ...f, cat: 'all', itemId: c.st.items[0].id, size: 1, temp: 'HOT' } })
+      };
+    });
+
+    const d = s.draft || this.newDraft();
+    const dStore = this.STORES[d.store];
+    const postOk = !!acc.paypayId && !!d.title.trim();
+
+    const p = s.posts.find(x => x.id === s.activeId) || s.posts[0];
+    const c = this.calc(p), st = c.st, list = p.orders, locked = isLocked(p);
+    const isOther = f.itemId === '_other';
+    const it = c.item(f.itemId);
+    const size = isOther ? -1 : c.fit(it.p, f.size);
+    const temp = it.t === 'both' ? f.temp : it.t;
+    const otherPrice = parseInt(String(f.otherPrice).replace(/[^0-9]/g, ''), 10) || 0;
+    const formPrice = isOther ? otherPrice : it.p[size];
+    const paid = list.filter(o => o.status === 'done').reduce((a, o) => a + c.price(o), 0);
+    const ST = { unpaid: ['未払い', '#FBE6E4', '#A3161B'], reported: ['報告あり', '#EAE2D8', SL], done: ['確認済み', '#E4F0DB', '#3F7A3A'] };
+    const MD = { go: ['一緒に行く', '#EF2027', '#FFFFFF'], ask: ['お願い', '#F4EEE6', '#2C1710'] };
+    const groupsMap = {};
+    list.forEach(o => { const k = c.short(o) + (o.note ? '（' + o.note + '）' : ''); groupsMap[k] = (groupsMap[k] || 0) + 1; });
+    const groups = Object.entries(groupsMap).map(([label, qty]) => ({ label, qty }));
+    const nameOk = !!acc.name && !locked && (!isOther || (f.otherName.trim() && otherPrice > 0));
+    const sheetO = list.find(o => o.id === s.sheetId);
+    const isDetail = view === 'detail';
+    const tabDefs = [['order', '注文する', 0, RED], ['list', '注文一覧', list.length, SL], ['pay', '精算', c.unpaid.length, '#A3161B'], ['chat', 'チャット', (p.msgs || []).length, '#2C1710']];
+    const shown = [...st.items, this.OTHER].filter(m => f.cat === 'all' || m.g === f.cat);
+    const goers = list.filter(o => o.mode === 'go').map(o => o.name);
+    let myCount = 0, myDue = 0;
+    s.posts.forEach(pp => { const cc = this.calc(pp); pp.orders.forEach(o => { if (o.name === acc.name) { myCount++; if (o.status === 'unpaid') myDue += cc.price(o); } }); });
+    const last = (acc.last || {})[p.store];
+    const mine = list.find(o => o.name === acc.name);
+
+    return {
+      isFeed: view === 'feed', isCompose: view === 'compose', isDetail, isSub: view !== 'feed' && view !== 'signup',
+      isSignup: view === 'signup', isProfile: view === 'profile', isProfileView: view === 'signup' || view === 'profile',
+      backLabel: view === 'compose' ? 'キャンセル' : view === 'profile' ? '戻る' : '投稿一覧',
+      onBack: () => this.setState({ view: 'feed', sheetId: null }),
+      me: acc.name, meInitial: acc.name.slice(0, 1), meColor: acc.color, accPaypay: acc.paypayId || '未登録',
+      onProfile: () => this.setState({ view: 'profile', pf: { ...acc } }),
+      pf: { ...s.pf, initial: (s.pf.name || '？').slice(0, 1) },
+      onPfName: e => { const v = e.target.value; this.setState(x => ({ pf: { ...x.pf, name: v } })); },
+      onPfPaypay: e => { const v = e.target.value; this.setState(x => ({ pf: { ...x.pf, paypayId: v } })); },
+      colors: ['#EF2027', '#A0643C', '#C49A78', '#2C1710', '#3F7A3A'].map(cl => ({ cl, ring: s.pf.color === cl ? '#2A1810' : 'transparent', onClick: () => this.setState(x => ({ pf: { ...x.pf, color: cl } })) })),
+      pfBtnBg: s.pf.name.trim() ? RED : '#D6CCC0',
+      pfBtnLabel: view === 'signup' ? (s.pf.name.trim() ? 'はじめる' : '表示名を入力') : '保存する',
+      onPfSave: () => {
+        if (!s.pf.name.trim()) return;
+        const na = { ...(s.account || {}), name: s.pf.name.trim(), paypayId: s.pf.paypayId.trim(), color: s.pf.color };
+        this.saveAcc(na); this.setState({ account: na, view: 'feed' });
+        this.showToast(view === 'signup' ? 'ようこそ、' + na.name + 'さん' : 'プロフィールを保存しました');
+      },
+      onLogout: () => { this.saveAcc(null); this.setState({ account: null, pf: { name: '', paypayId: '', color: '#EF2027' }, view: 'signup' }); },
+      myCount, myDue: this.yen(myDue), myDueBg: myDue ? '#FBE6E4' : '#F4EEE6', myDueFg: myDue ? '#A3161B' : '#2A1810',
+      onCompose: () => this.setState({ view: 'compose', draft: this.newDraft() }),
+      filters: [['all', 'すべて'], ['open', '募集中'], ['unpaid', '未精算あり']].map(([k, label]) => ({ label, ...sel(s.filter === k), onClick: () => this.setState({ filter: k }) })),
+      feed, feedEmpty: feed.length === 0,
+
+      draft: d, draftInitial: acc.name.slice(0, 1),
+      storeCards: Object.entries(this.STORES).map(([k, v]) => { const on = k === d.store; return { label: v.label, sub: v.sub, mark: v.mark, markBg: v.markBg, on, bg: on ? '#F3EADF' : '#FFFFFF', bd: on ? RED : '#EAE2D8', onClick: () => this.setDraft(d.bodyEdited ? { store: k } : { store: k, body: this.bodyFor(k) }) }; }),
+      deadlines: this.slots().map(t => ({ label: this.hm(t), ...sel(this.hm(t) === this.hm(d.deadline)), onClick: () => this.setDraft({ deadline: t }) })),
+      departs: [0, 10, 15, 30].map(m => ({ label: this.hm(d.deadline + m * this.MIN) + (m ? '' : '（締切と同時）'), ...sel(m === d.departOff), onClick: () => this.setDraft({ departOff: m }) })),
+      onDraftTitle: e => this.setDraft({ title: e.target.value }),
+      onDraftBody: e => this.setDraft({ body: e.target.value, bodyEdited: true }),
+      onDraftOrganizer: e => this.setDraft({ organizer: e.target.value }),
+      onDraftPaypay: e => this.setDraft({ paypayId: e.target.value }),
+      postBg: postOk ? RED : '#D6CCC0',
+      postLabel: postOk ? '投稿する' : (!acc.paypayId ? 'PayPay IDを登録して投稿' : 'タイトルを入力'),
+      onPost: () => {
+        if (!postOk) { if (!acc.paypayId) { this.setState({ view: 'profile', pf: { ...acc } }); this.showToast('投稿にはPayPay IDの登録が必要です'); } return; }
+        const np = { id: ++this.uid, organizer: acc.name, paypayId: acc.paypayId, title: d.title.trim(), body: d.body.trim() || this.bodyFor(d.store), store: d.store, deadline: d.deadline, depart: d.deadline + d.departOff * this.MIN, ago: 'たった今', closed: false, msgs: [], orders: [] };
+        this.copy('☕ COFFEE RUN｜' + np.title + '\n' + np.body + '\n' + dStore.label + '・注文締切 ' + this.hm(np.deadline) + '／出発 ' + this.hm(np.depart) + '\n支払いはPayPay（ID: ' + np.paypayId + '）');
+        this.setState(prev => ({ posts: [np, ...prev.posts], view: 'feed', draft: null, filter: 'all' }));
+        this.showToast('投稿しました。共有文をコピー済み');
+      },
+
+      cur: { ...p, initial: p.organizer.slice(0, 1), avBg: avc(p.organizer), storeName: st.label, mark: st.mark, markBg: st.markBg, menuUrl: st.url, deadlineStr: this.hm(p.deadline), departStr: this.hm(p.depart) },
+      runStatus: locked ? 'CLOSED・受付終了' : 'NOW OPEN・募集中',
+      timerCaption: locked ? '受付' : '締切まで', timerText: locked ? '終了' : this.countdown(p.deadline - now), timerFg: locked ? '#A09284' : tFg(p),
+      closed: locked, priceNote: '価格は' + st.note,
+      tabs: tabDefs.map(([k, label, n, col]) => { const on = s.tab === k; return { label, badge: n, hasBadge: n > 0, badgeBg: col, fg: on ? '#2A1810' : '#7A6A5E', bg: on ? '#FFFFFF' : 'transparent', sh: on ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', onClick: () => this.setState({ tab: k }) }; }),
+      isOrder: isDetail && s.tab === 'order', isList: isDetail && s.tab === 'list', isPay: isDetail && s.tab === 'pay', isChat: isDetail && s.tab === 'chat',
+      form: f,
+      modes: [['go', '一緒に行ける！', '受け取りを手伝います'], ['ask', 'お願いします！', '買ってきてほしい']].map(([k, label, sub]) => { const on = f.mode === k; return { label, sub, bg: on ? '#F3EADF' : '#FFFFFF', bd: on ? RED : '#EAE2D8', fg: on ? RED : '#3E2A20', onClick: () => this.setForm({ mode: k }) }; }),
+      onName: e => this.setForm({ name: e.target.value }),
+      onNote: e => this.setForm({ note: e.target.value }),
+      onOtherName: e => this.setForm({ otherName: e.target.value }),
+      onOtherPrice: e => this.setForm({ otherPrice: e.target.value }),
+      isOther,
+      members: this.MEMBERS.map(m => ({ label: m, ...sel(f.name === m), onClick: () => this.setForm({ name: m }) })),
+      menuCount: st.items.length,
+      cats: [['all', 'すべて'], ...st.cats.map(x => [x, x]), ...(st.cats.includes('その他') ? [] : [['その他', 'その他']])].map(([k, label]) => ({ label, ...sel(f.cat === k), onClick: () => this.setForm({ cat: k }) })),
+      menu: shown.map(m => { const on = m.id === it.id; const [tint, lid, cup] = this.TINT[m.c]; const first = m.p.find(x => x != null); return { name: m.name, price: m.id === '_other' ? '自由入力' : '¥' + this.yen(first) + '〜', tempLabel: m.t === 'both' ? 'HOT/ICED' : m.t, on, tint, lid, cup, bg: on ? '#F3EADF' : '#FFFFFF', bd: on ? RED : '#EAE2D8', onClick: () => this.setForm({ itemId: m.id }) }; }),
+      sizes: st.sizes.map((z, i) => { const ok = !isOther && it.p[i] != null; return { label: z, ...sel(i === size), op: ok ? 1 : 0.35, cursor: ok ? 'pointer' : 'not-allowed', onClick: () => ok && this.setForm({ size: i }) }; }),
+      temps: ['HOT', 'ICED'].map(t => { const ok = it.t === 'both' || it.t === t; return { label: t, ...sel(t === temp), op: ok ? 1 : 0.35, cursor: ok ? 'pointer' : 'not-allowed', onClick: () => ok && this.setForm({ temp: t }) }; }),
+      formPrice: this.yen(formPrice),
+      submitBg: nameOk ? RED : '#D6CCC0',
+      submitLabel: locked ? '受付終了' : (isOther && !nameOk) ? 'ドリンク名と金額を入力' : mine ? '注文を変更する' : '注文する',
+      hasMine: !!mine, hasLast: !!last && !locked, lastLabel: last ? c.short(last) + (last.note ? '（' + last.note + '）' : '') : '',
+      onUseLast: () => last && this.setForm({ itemId: last.itemId, size: last.size, temp: last.temp, note: last.note || '', mode: last.mode || 'ask', otherName: last.customName || '', otherPrice: last.customPrice ? String(last.customPrice) : '', cat: 'all' }),
+      onSubmit: () => {
+        if (!nameOk) return;
+        const o = { id: ++this.uid, name: acc.name, mode: f.mode, itemId: it.id, size, temp, note: f.note.trim(), status: 'unpaid', customName: isOther ? f.otherName.trim() : '', customPrice: isOther ? otherPrice : 0 };
+        this.updPost(x => ({ ...x, orders: [...x.orders.filter(y => y.name !== o.name), o] }));
+        const na = { ...acc, last: { ...(acc.last || {}), [p.store]: { itemId: o.itemId, size: o.size, temp: o.temp, note: o.note, mode: o.mode, customName: o.customName, customPrice: o.customPrice } } };
+        this.saveAcc(na); this.setState({ account: na });
+        this.setForm({ note: '', otherName: '', otherPrice: '' });
+        this.showToast(mine ? '注文を変更しました' : '注文を受け付けました');
+      },
+      cups: list.length, totalStr: this.yen(c.total), paidStr: this.yen(paid),
+      progress: c.total ? Math.round(paid / c.total * 100) + '%' : '0%',
+      cntDone: list.length - c.unpaid.length - c.reported.length, cntReported: c.reported.length, cntUnpaid: c.unpaid.length,
+      allPaid: list.length > 0 && c.unpaid.length === 0 && c.reported.length === 0,
+      groups, noOrders: list.length === 0,
+      hasGoers: goers.length > 0, goers: goers.map(n => n + 'さん').join('、'),
+      orders: list.map(o => { const [stLabel, stBg, stFg] = ST[o.status]; const [mdLabel, mdBg, mdFg] = MD[o.mode || 'ask']; return {
+        name: o.name, initial: o.name.slice(0, 1), line: c.short(o), short: c.short(o), note: o.note, hasNote: !!o.note,
+        priceStr: this.yen(c.price(o)), stLabel, stBg, stFg, mdLabel, mdBg, mdFg,
+        canPay: o.status === 'unpaid', canConfirm: o.status === 'reported', isDone: o.status === 'done',
+        onPay: () => this.setState({ sheetId: o.id, sheetOpened: false }),
+        onConfirm: () => { this.setStatus(o.id, 'done'); this.showToast(o.name + 'さんの入金を確認しました'); },
+        onUndo: () => this.setStatus(o.id, 'unpaid'),
+        onDelete: () => this.updPost(x => ({ ...x, orders: x.orders.filter(y => y.id !== o.id) }))
+      }; }),
+      onCopy: () => {
+        const t = '【' + st.label + ' 注文】受取：' + p.organizer + '（出発 ' + this.hm(p.depart) + '）\n' + groups.map(g => '・' + g.label + ' ×' + g.qty).join('\n') + '\n計' + list.length + '杯 / ¥' + this.yen(c.total);
+        this.copy(t); this.showToast('注文内容をコピーしました');
+      },
+      closeLabel: p.closed ? '受付を再開' : '受付を締め切る',
+      onToggleClose: () => { this.updPost(x => ({ ...x, closed: !x.closed })); this.showToast(p.closed ? '受付を再開しました' : '受付を締め切りました'); },
+      remindBg: c.unpaid.length ? SL : '#D6CCC0',
+      remindLabel: c.unpaid.length ? '未払い' + c.unpaid.length + '名にリマインド' : '未払いの人はいません',
+      onRemind: () => {
+        if (!c.unpaid.length) return;
+        const t = '☕ COFFEE RUN｜' + p.title + ' 精算のお願い（PayPay：' + p.organizer + ' / ID ' + p.paypayId + '）\n' + c.unpaid.map(o => o.name + 'さん ¥' + this.yen(c.price(o))).join('\n');
+        this.copy(t); this.showToast('リマインド文をコピーしました');
+      },
+      sheetOpen: isDetail && !!sheetO,
+      sheet: sheetO ? { name: sheetO.name, priceStr: this.yen(c.price(sheetO)), short: c.short(sheetO) } : {},
+      reportBd: s.sheetOpened ? RED : '#D6CCC0', reportFg: s.sheetOpened ? RED : '#A09284',
+      stop: e => e.stopPropagation(),
+      onCloseSheet: () => this.setState({ sheetId: null }),
+      onOpenPayPay: () => {
+        this.copy(String(c.price(sheetO)));
+        this.setState({ sheetOpened: true });
+        this.showToast('¥' + this.yen(c.price(sheetO)) + ' をコピー → 「' + p.paypayId + '」へ送金');
+      },
+      onReport: () => { this.setStatus(sheetO.id, 'reported'); this.setState({ sheetId: null }); this.showToast('送金を報告しました'); },
+      hasToast: !!s.toast, toast: s.toast,
+      msgs: (p.msgs || []).map((m, i, arr) => { const mine = m.name === acc.name; const prev = arr[i - 1]; const cont = prev && prev.name === m.name; return {
+        text: m.text, name: m.name, initial: m.name.slice(0, 1), av: avc(m.name), time: this.hm(m.ts),
+        dir: mine ? 'row-reverse' : 'row', align: mine ? 'flex-end' : 'flex-start', showAv: !mine && !cont, showName: !mine && !cont,
+        bg: mine ? '#EF2027' : '#F4EEE6', fg: mine ? '#FFFFFF' : '#2A1810', radius: mine ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
+      }; }).map(m => m.showAv || m.dir === 'row-reverse' ? m : { ...m, showAv: false }),
+      noMsgs: !(p.msgs || []).length,
+      quick: ['了解！', 'ありがとう！', '今どこ？', '着きました', '追加いいですか？'].map(q => ({ label: q, onClick: () => this.sendMsg(q) })),
+      chatText: s.chatText,
+      onChatText: e => this.setState({ chatText: e.target.value }),
+      onChatKey: e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); this.sendMsg(s.chatText); } },
+      onSend: () => this.sendMsg(s.chatText),
+      sendBg: s.chatText.trim() ? '#EF2027' : '#D6CCC0',
+      onReplaySplash: () => this.replaySplash(),
+      splash: s.splash ? React.createElement('div', { key: 'sp' + s.splashKey, onClick: () => this.setState({ splash: false }), style: { position: 'fixed', inset: 0, zIndex: 50, background: '#FBF7F2', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', animation: 'crFade 350ms ease 1950ms forwards', cursor: 'pointer' } },
+        React.createElement('div', { style: { position: 'relative', width: 'min(72vw, 320px)' } },
+          [0, 1, 2].map(i => React.createElement('span', { key: i, style: { position: 'absolute', right: '100%', marginRight: (10 + i * 8) + 'px', top: (22 + i * 20) + '%', width: (84 - i * 22) + 'px', height: '7px', borderRadius: '4px', background: i === 1 ? '#EF2027' : '#2C1710', transformOrigin: 'right center', animation: 'crLine 620ms cubic-bezier(.2,.8,.2,1) ' + (60 + i * 70) + 'ms both' } })),
+          React.createElement('img', { src: 'assets/coffee-run-logo.svg', alt: 'COFFEE RUN', style: { width: '100%', display: 'block', animation: 'crDash 760ms cubic-bezier(.2,.8,.2,1) both' } }),
+          React.createElement('div', { style: { marginTop: '20px', textAlign: 'center', fontSize: '13px', fontWeight: 700, color: '#7A6A5E', letterSpacing: '0.12em', animation: 'crUp 420ms ease 780ms both' } }, 'みんなのコーヒー、まとめて。')
+        )) : null
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -7,7 +7,7 @@ self.addEventListener('push', function(e){
   try{ d = e.data ? e.data.json() : {}; }catch(err){ d = {t:'COFFEE RUN', b:e.data ? e.data.text() : ''}; }
   e.waitUntil(self.registration.showNotification(d.t || 'COFFEE RUN', {
     body:d.b || '',
-    icon:'/assets/icon-192.png',
+    icon:'/assets/icon-192.png?v=2',
     badge:'/assets/badge-96.png',
     tag:d.g || undefined,
     renotify:!!d.g,

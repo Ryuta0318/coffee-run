@@ -32,3 +32,8 @@ input::placeholder,textarea::placeholder{color:#A09284}
 .inp:focus{border-color:#EF2027!important;box-shadow:0 0 0 3px rgba(239,32,39,0.16)}
 button:focus-visible,a:focus-visible,article:focus-visible{outline:3px solid rgba(239,32,39,0.4);outline-offset:2px}
 .noscroll{scrollbar-width:none}.noscroll::-webkit-scrollbar{display:none}
+
+/* PayPay から戻ってきたら ② を目立たせる */
+@keyframes crPulse{0%{box-shadow:0 0 0 0 rgba(239,32,39,.45)}70%{box-shadow:0 0 0 12px rgba(239,32,39,0)}100%{box-shadow:0 0 0 0 rgba(239,32,39,0)}}
+.pulse{animation:crPulse 1.4s ease-out infinite}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}

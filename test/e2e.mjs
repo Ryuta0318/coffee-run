@@ -187,5 +187,62 @@ await A.waitForSelector("text=投稿を削除しました");
 await B.waitForSelector("text=この投稿は削除されました");
 await B.waitForSelector("text=みんなもコーヒーいるかな？");
 
+step("まとめ払い：2つの投稿の未払いを、フィードから1回で（前にも送った相手なので ID はいらない）");
+const goFeed = async (P) => { await P.goto(BASE + "/"); await P.waitForSelector("text=みんなもコーヒーいるかな？"); };
+for (let i = 0; i < 2; i++) {
+  await goFeed(A);
+  await A.click("text=＋ 投稿");
+  await A.click("text=投稿する");
+  await A.waitForSelector("text=投稿しました。共有文をコピー済み");
+  await goFeed(B);
+  await B.click(`article:has-text("${nameA}") >> nth=0`);
+  await B.waitForSelector("text=NOW OPEN・募集中");
+  await B.click('button:has-text("カフェラテ")');
+  await B.click('main button:has-text("注文する"), main button:has-text("注文を変更する")');
+  await B.waitForSelector("text=注文を受け付けました");
+  await goFeed(A);
+  await A.click(`article:has-text("${nameA}") >> nth=0`);
+  await A.click('button[role="tab"]:has-text("注文一覧")');
+  await A.click("text=受付を締め切る");
+  await A.waitForSelector("text=受付を再開");
+}
+await goFeed(B);
+await B.waitForSelector(`text=${nameA}さんへ ¥760`);
+await B.waitForSelector("text=未払い・2件まとめて");
+assert.equal(await B.locator('article button:has-text("¥380 払う")').count(), 2, "カードからも直接払える");
+await shot(B, "13-feed-debt", false);
+await B.click('main > div button:text-is("PayPayで払う")');
+await B.waitForSelector("text=前にも送った相手です。IDの入力はいりません");
+await B.waitForSelector("text=（2件まとめて）");
+await shot(B, "14-sheet-bundle", false);
+await B.click('button:has-text("PayPayを開く")');
+assert.equal(await clip(B), "760", "2回目以降は金額をコピー");
+await B.click("text=送金しました（報告する）");
+await B.waitForSelector("text=2件の送金を報告しました");
+assert.equal(await B.locator(`text=${nameA}さんへ ¥760`).count(), 0, "未払いの欄が消える");
+
+step("投稿者は「まとめて確認」……は1投稿に2件以上のとき。ここでは各投稿で確認");
+await goFeed(A);
+await A.click(`article:has-text("${nameA}") >> nth=0`);
+await A.click('button[role="tab"]:has-text("精算")');
+await A.click("text=入金を確認");
+await A.waitForSelector("text=全員の支払いが完了しました");
+
+step("通知（精算のお願い）から開くと、支払いのシートまで開く");
+await goFeed(A);
+await A.click("text=＋ 投稿");
+await A.click("text=投稿する");
+await A.waitForSelector("text=投稿しました。共有文をコピー済み");
+const pid = await A.evaluate(() => fetch("/api/boot").then((r) => r.json()).then((j) => j.posts[0].id));
+await goFeed(B);
+await B.click(`article:has-text("${nameA}") >> nth=0`);
+await B.click('button:has-text("カフェラテ")');
+await B.click('main button:has-text("注文する")');
+await B.waitForSelector("text=注文を受け付けました");
+await A.evaluate((id) => fetch("/api/posts/" + id + "/close", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ closed: true }) }), pid);
+await B.goto(BASE + "/?p=" + pid + "&tab=pay&pay=1");
+await B.waitForSelector("text=PayPayで支払う");
+await B.waitForSelector("text=あなたの支払い");
+
 await browser.close();
 console.log(process.exitCode ? "NG" : "OK");

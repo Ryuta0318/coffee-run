@@ -464,7 +464,7 @@ export class Hub extends DurableObject {
       this.limit("remind:" + p.id, 6, 3600e3);
       const unpaid = this.q("SELECT * FROM orders WHERE post_id=? AND status='unpaid'", p.id);
       for (const o of unpaid) {
-        this.pushTo(o.user_id, { t: "COFFEE RUN｜精算のお願い", b: `${p.title} ¥${yen(o.price)} を${u.name}さん（PayPay ID: ${p.paypay_id}）へ`, u: "/?p=" + p.id + "&tab=pay", g: "pay-" + p.id });
+        this.pushTo(o.user_id, { t: "COFFEE RUN｜精算のお願い", b: `${p.title} ¥${yen(o.price)} を${u.name}さん（PayPay ID: ${p.paypay_id}）へ`, u: "/?p=" + p.id + "&tab=pay&pay=1", g: "pay-" + p.id });
       }
       return json({ sent: unpaid.length });
     }

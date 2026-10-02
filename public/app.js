@@ -254,9 +254,11 @@ class App extends Component {
       view: "feed",
       activeId: q.get("p"),
       startTab: q.get("tab"),
+      startPay: q.get("pay") === "1",
       filter: "all",
       tab: "order",
-      sheetId: null,
+      sheetIds: null, // PayPay シートで払う注文（同じ投稿者あての未払い。まとめて払える）
+      sheetBack: false, // ① で PayPay を開いて戻ってきた
       sheetOpened: false,
       toast: "",
       draft: null,
@@ -327,6 +329,11 @@ class App extends Component {
         st.view = "detail";
         st.tab = this.state.startTab || (this.lockedAt(p, j.now) ? "pay" : "order");
         st.form = this.formFor(p, j.me, j.menu);
+        // 通知（精算のお願い）から開いたときは、支払いのシートまで開く
+        if (this.state.startPay) {
+          const mine = p.orders.find((o) => o.userId === j.me.id && o.status === "unpaid");
+          if (mine) st.sheetIds = [mine.id];
+        }
       }
     }
     this.setState(st);
@@ -396,7 +403,7 @@ class App extends Component {
 
   // ---- 画面の移動（スマホの「戻る」でも戻れるように URL に載せる）----
   go(view, extra = {}, push = true) {
-    const st = { view, sheetId: null, ...extra };
+    const st = { view, sheetIds: null, ...extra };
     this.setState(st);
     if (push) {
       const url = view === "detail" ? "/?p=" + (extra.activeId || this.state.activeId) : view === "feed" || view === "signup" ? "/" : "/?v=" + view;
@@ -407,7 +414,14 @@ class App extends Component {
   fromUrl() {
     const q = new URLSearchParams(location.search);
     if (!this.state.me) return;
-    if (q.get("p")) this.openPost(q.get("p"), q.get("tab"), false);
+    if (q.get("p")) {
+      this.openPost(q.get("p"), q.get("tab"), false);
+      if (q.get("pay") === "1") {
+        const p = this.state.posts.find((x) => x.id === q.get("p"));
+        const mine = p && p.orders.find((o) => o.userId === this.state.me.id && o.status === "unpaid");
+        if (mine) this.openPay([mine.id]);
+      }
+    }
     else if (q.get("v") === "compose") this.go("compose", { draft: this.state.draft || this.newDraft() }, false);
     else if (q.get("v") === "profile") this.go("profile", { pf: { ...this.state.me } }, false);
     else this.go("feed", {}, false);
@@ -427,6 +441,66 @@ class App extends Component {
     }
     const locked = this.lockedAt(p, this.state.now);
     this.go("detail", { activeId: id, tab: tab || (locked ? "pay" : "order"), form: this.formFor(p, this.state.me, this.state.menu) }, push);
+  }
+
+  // ---- 支払い ----
+  // 自分の未払い（受付が終わった投稿のもの）を、送り先（投稿者）ごとにまとめる
+  myDebts() {
+    const s = this.state, me = s.me;
+    if (!me) return [];
+    const groups = {};
+    for (const p of s.posts) {
+      if (!this.lockedAt(p, s.now) || p.organizerId === me.id) continue;
+      for (const o of p.orders) {
+        if (o.userId !== me.id || o.status !== "unpaid") continue;
+        const k = p.organizerId;
+        (groups[k] = groups[k] || { organizerId: k, paypayId: p.paypayId, items: [], total: 0 }).items.push({ o, p });
+        groups[k].total += o.price;
+        groups[k].paypayId = p.paypayId; // 新しい投稿の ID を使う
+      }
+    }
+    return Object.values(groups);
+  }
+  // 前にもこの人へ送ったことがあるか（PayPay の「送る」の履歴に出るので、ID の入力が要らない）
+  paidBefore(organizerId) {
+    const me = this.state.me;
+    if (!me) return false;
+    let known = [];
+    try {
+      known = JSON.parse(ls.get("coffeeRun.paidTo") || "[]");
+    } catch {}
+    if (known.includes(organizerId)) return true;
+    return this.state.posts.some((p) => p.organizerId === organizerId && p.orders.some((o) => o.userId === me.id && (o.status === "reported" || o.status === "done")));
+  }
+  rememberPaid(organizerId) {
+    let known = [];
+    try {
+      known = JSON.parse(ls.get("coffeeRun.paidTo") || "[]");
+    } catch {}
+    if (!known.includes(organizerId)) ls.set("coffeeRun.paidTo", JSON.stringify([...known, organizerId].slice(-50)));
+  }
+  openPay(ids) {
+    this.setState({ sheetIds: ids, sheetOpened: false, sheetBack: false });
+  }
+  // 自分の未払いを送り先ごとに1行で（フィードとアカウント画面）
+  debtList(debts, { compact = false } = {}) {
+    if (!debts.length) return null;
+    return html`<div style="display:flex;flex-direction:column;gap:8px">
+      ${debts.map(
+        (d) => html`<div key=${d.organizerId} style="display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;background:#FBE6E4;border-radius:14px">
+          <${Av} size=${36} bg=${this.colorOf(d.organizerId)} fs=${14} src=${this.photoOf(d.organizerId)}>${this.nameOf(d.organizerId).slice(0, 1)}<//>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font-size:11px;color:#A3161B;font-weight:700">未払い${d.items.length > 1 ? "・" + d.items.length + "件まとめて" : ""}</span>
+            <span style="font-size:14px;font-weight:700;color:#2A1810;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this.nameOf(d.organizerId)}さんへ <span style="font-variant-numeric:tabular-nums">¥${yen(d.total)}</span></span>
+            ${compact ? null : html`<span style="font-size:11px;color:#7A6A5E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.items.map((x) => x.p.title).join("・")}</span>`}
+          </div>
+          <button onClick=${(e) => {
+            e.stopPropagation();
+            this.openPay(d.items.map((x) => x.o.id));
+          }} class="hv-red" style="height:40px;padding:0 16px;border:none;border-radius:20px;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer;flex:none">PayPayで払う</button>
+        </div>`
+      )}
+    </div>`;
   }
 
   // ---- 計算 ----
@@ -589,7 +663,7 @@ class App extends Component {
           ${v.isProfileView ? this.profileView(v) : null}
           ${v.isCompose ? this.composeView(v) : null}
           ${v.isDetail ? this.detailView(v) : null}
-          ${v.sheetOpen ? this.sheetView(v) : null}
+          ${s.sheetIds && s.sheetIds.length ? this.sheetView() : null}
           ${s.splash ? html`<${Splash} key=${"sp" + s.splashKey} onSkip=${() => this.setState({ splash: false })} />` : null}
           ${s.toast
             ? html`<div role="status" aria-live="polite" style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2A1810;color:#FFFFFF;padding:10px 18px 10px 10px;border-radius:24px;font-size:13px;z-index:30;max-width:90vw;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:flex;align-items:center;gap:10px">
@@ -614,7 +688,6 @@ class App extends Component {
       isFeed: view === "feed", isCompose: view === "compose", isDetail: view === "detail",
       isSub: view !== "feed" && view !== "signup", isSignup: view === "signup", isProfile: view === "profile",
       isProfileView: view === "signup" || view === "profile",
-      sheetOpen: view === "detail" && !!s.sheetId && p.orders.some((o) => o.id === s.sheetId),
       meInitial: me.name.slice(0, 1),
     };
   }
@@ -662,6 +735,7 @@ class App extends Component {
     const tFg = (p) => (p.deadline - now < 5 * MIN ? "#A3161B" : "#2A1810");
     const all = s.posts.map((p) => ({ p, c: this.calc(p) }));
     const list = all.filter((x) => s.filter === "all" || (s.filter === "open" ? !isLocked(x.p) : x.c.unpaid.length + x.c.reported.length > 0));
+    const debts = this.myDebts();
     const ps = s.push;
     const showPushCard = !ps.on && !ps.dismissed && (ps.support.ok ? Notification.permission !== "denied" : ps.support.why === "ios");
     return html`
@@ -686,6 +760,8 @@ class App extends Component {
               <button onClick=${() => this.dismissPush()} aria-label="閉じる" class="hv-txt" style="width:32px;height:32px;border:none;border-radius:50%;background:transparent;color:#A09284;font-size:16px;cursor:pointer;flex:none">×</button>
             </div>`
           : null}
+
+        ${debts.length ? html`<div style="padding:12px 20px 0">${this.debtList(debts)}</div>` : null}
 
         <div class="noscroll" style="display:flex;gap:6px;padding:12px 20px;border-bottom:1px solid #F4EEE6;overflow-x:auto">
           ${[["all", "すべて"], ["open", "募集中"], ["unpaid", "未精算あり"]].map(([k, label]) => {
@@ -735,7 +811,15 @@ class App extends Component {
                   </div>
                   <span style="font-size:12px;color:#7A6A5E">${joinText}</span>
                   ${!locked ? html`<span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center;flex:none">注文する</span>` : null}
-                  ${locked && c.unpaid.length > 0 ? html`<span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;border:1px solid #EF2027;color:#EF2027;font-size:12px;font-weight:700;display:flex;align-items:center;box-sizing:border-box;flex:none">精算する</span>` : null}
+                  ${(() => {
+                    const mineDue = locked && p.orders.find((o) => o.userId === v.me.id && o.status === "unpaid" && p.organizerId !== v.me.id);
+                    if (mineDue)
+                      return html`<button onClick=${(e) => {
+                        e.stopPropagation();
+                        this.openPay([mineDue.id]);
+                      }} class="hv-red" style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;border:none;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center;cursor:pointer;flex:none;font-variant-numeric:tabular-nums">¥${yen(mineDue.price)} 払う</button>`;
+                    return locked && c.unpaid.length > 0 ? html`<span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;border:1px solid #EF2027;color:#EF2027;font-size:12px;font-weight:700;display:flex;align-items:center;box-sizing:border-box;flex:none">精算する</span>` : null;
+                  })()}
                 </div>
               </div>
             </article>`;
@@ -837,6 +921,7 @@ class App extends Component {
               <div style="background:${due ? "#FBE6E4" : "#F4EEE6"};border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-size:11px;color:#7A6A5E">未払い</span><span style="font-size:20px;font-weight:700;color:${due ? "#A3161B" : "#2A1810"};font-variant-numeric:tabular-nums">¥${yen(due)}</span></div>
             </div>`
           : null}
+        ${v.isProfile ? this.debtList(this.myDebts(), { compact: true }) : null}
 
         <div style="display:flex;flex-direction:column;gap:8px">
           <label for="pf-name" style="font-size:13px;font-weight:700;color:#2C1710">表示名</label>
@@ -1274,8 +1359,37 @@ class App extends Component {
         });
         this.showToast("リマインド文をコピーしました");
       });
+    const mine = list.find((o) => o.userId === me.id && !isOrg);
+    const sameOrg = mine && mine.status === "unpaid" ? (this.myDebts().find((d) => d.organizerId === p.organizerId) || { items: [], total: 0 }) : null;
+    const confirmAll = () =>
+      this.act(async () => {
+        const rs = c.reported.slice();
+        let last = null;
+        for (const o of rs) last = await api("/api/orders/" + o.id + "/status", { method: "POST", body: { status: "done" } });
+        if (last) this.upsert(last.post);
+        this.showToast(rs.length + "件の入金を確認しました");
+      });
     return html`
       <main data-screen-label="精算" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:20px">
+        ${mine
+          ? html`<div style="border-radius:16px;padding:14px 14px 14px 16px;display:flex;align-items:center;gap:12px;background:${mine.status === "unpaid" ? "#FBE6E4" : mine.status === "reported" ? "#F3EADF" : "#E4F0DB"}">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:11px;font-weight:700;color:${mine.status === "unpaid" ? "#A3161B" : mine.status === "reported" ? "#A0643C" : "#3F7A3A"}">${mine.status === "unpaid" ? "あなたの支払い" : mine.status === "reported" ? "送金を報告済み・" + org + "さんの確認待ち" : "支払い完了"}</span>
+                <span style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums">¥${yen(mine.price)}</span>
+                ${sameOrg && sameOrg.items.length > 1
+                  ? html`<span style="font-size:11px;color:#7A6A5E">ほかの投稿もあわせて ${org}さんへ ¥${yen(sameOrg.total)}（${sameOrg.items.length}件）</span>`
+                  : null}
+              </div>
+              ${mine.status === "unpaid"
+                ? html`<div style="display:flex;flex-direction:column;gap:6px;flex:none">
+                    <button onClick=${() => this.openPay([mine.id])} class="hv-red" style="height:44px;padding:0 18px;border:none;border-radius:22px;background:#EF2027;color:#FFFFFF;font-size:14px;font-weight:700;cursor:pointer">PayPayで払う</button>
+                    ${sameOrg && sameOrg.items.length > 1
+                      ? html`<button onClick=${() => this.openPay(sameOrg.items.map((x) => x.o.id))} style="height:32px;padding:0 12px;border:1px solid #EF2027;border-radius:16px;background:#FFFFFF;color:#EF2027;font-size:12px;font-weight:700;cursor:pointer">まとめて払う</button>`
+                      : null}
+                  </div>`
+                : null}
+            </div>`
+          : null}
         <div style="display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;justify-content:space-between;align-items:baseline">
             <span style="font-size:13px;font-weight:700;color:#2C1710">回収状況</span>
@@ -1303,6 +1417,9 @@ class App extends Component {
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px">
+          ${isOrg && c.reported.length >= 2
+            ? html`<button onClick=${confirmAll} class="hv-panel" style="height:46px;border:1px solid #2C1710;border-radius:23px;background:#FFFFFF;color:#2C1710;font-size:14px;font-weight:700;cursor:pointer">報告あり ${c.reported.length}件をまとめて確認</button>`
+            : null}
           ${list.map((o) => {
             const [stLabel, stBg, stFg] = ST[o.status];
             const name = this.nameOf(o.userId);
@@ -1312,7 +1429,7 @@ class App extends Component {
                 <span style="font-size:12px;color:#7A6A5E">${this.short(o)}・¥${yen(o.price)}</span>
               </div>
               ${o.status === "unpaid" && o.userId === me.id
-                ? html`<button onClick=${() => this.setState({ sheetId: o.id, sheetOpened: false })} class="hv-red" style="height:40px;padding:0 16px;border:none;border-radius:20px;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer;flex:none">PayPayで払う</button>`
+                ? html`<button onClick=${() => this.openPay([o.id])} class="hv-red" style="height:40px;padding:0 16px;border:none;border-radius:20px;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer;flex:none">PayPayで払う</button>`
                 : null}
               ${o.status === "reported" && isOrg
                 ? html`<button onClick=${() => setStatus(o, "done", name + "さんの入金を確認しました")} class="hv-panel" style="height:40px;padding:0 16px;border:1px solid #2C1710;border-radius:20px;background:#FFFFFF;color:#2C1710;font-size:13px;font-weight:700;cursor:pointer;flex:none">入金を確認</button>`
@@ -1333,54 +1450,80 @@ class App extends Component {
   }
 
   // ---- PayPay ボトムシート ----
-  sheetView(v) {
-    const s = v.s, p = v.p;
-    const o = p.orders.find((x) => x.id === s.sheetId);
-    const org = this.nameOf(p.organizerId);
-    const close = () => this.setState({ sheetId: null });
-    // ① 送り先の ID をコピーして PayPay を開く。PayPay の「送る」→ ID 検索に貼り付ければよい。
-    //    金額は短いので画面を見て入力（下の「金額をコピー」でもコピーできる）
+  //   同じ投稿者あての未払いをまとめて1回で送れる。
+  //   初めての相手：① で ID をコピー → PayPay の「送る」で検索に貼る
+  //   前にも送った相手：PayPay の「送る」の履歴に出るので、そのまま開くだけ
+  sheetView() {
+    const s = this.state, me = s.me;
+    const items = [];
+    for (const p of s.posts) for (const o of p.orders) if (s.sheetIds.includes(o.id) && o.userId === me.id && o.status === "unpaid") items.push({ o, p });
+    if (!items.length) return null;
+    const p0 = items[items.length - 1].p;
+    const orgId = p0.organizerId, org = this.nameOf(orgId), payId = p0.paypayId;
+    const total = items.reduce((a, x) => a + x.o.price, 0);
+    const known = this.paidBefore(orgId);
+    const close = () => this.setState({ sheetIds: null });
     const openPayPay = async () => {
-      await copy(p.paypayId);
-      this.setState({ sheetOpened: true });
-      this.showToast("ID「" + p.paypayId + "」をコピー → PayPayの「送る」で貼り付けて ¥" + yen(o.price));
+      await copy(known ? String(total) : payId);
+      this.setState({ sheetOpened: true, sheetBack: false });
+      this.showToast(known ? "PayPayの「送る」→ 履歴の" + org + "さん → ¥" + yen(total) : "ID「" + payId + "」をコピー → PayPayの「送る」で貼り付けて ¥" + yen(total));
+      // PayPay から戻ってきたら、② を目立たせる
+      const onBack = () => {
+        if (document.visibilityState !== "visible") return;
+        document.removeEventListener("visibilitychange", onBack);
+        this.setState({ sheetBack: true });
+      };
+      document.addEventListener("visibilitychange", onBack);
       // PayPay アプリを開く（スマホのみ。インストールされていないと開けない）
       if (isMobile()) setTimeout(() => (location.href = "paypay://"), 900);
     };
-    const copyPrice = async () => {
-      await copy(String(o.price));
-      this.showToast("¥" + yen(o.price) + " をコピーしました");
+    const copyText = async (t, msg) => {
+      await copy(t);
+      this.showToast(msg);
     };
     const report = () =>
       this.act(async () => {
         if (!s.sheetOpened) return;
-        const j = await api("/api/orders/" + o.id + "/status", { method: "POST", body: { status: "reported" } });
-        this.upsert(j.post);
-        this.setState({ sheetId: null });
-        this.showToast("送金を報告しました");
+        for (const x of items) this.upsert((await api("/api/orders/" + x.o.id + "/status", { method: "POST", body: { status: "reported" } })).post);
+        this.rememberPaid(orgId);
+        this.setState({ sheetIds: null });
+        await this.refresh();
+        this.showToast(items.length > 1 ? items.length + "件の送金を報告しました" : "送金を報告しました");
       });
     const rb = s.sheetOpened ? RED : "#D6CCC0";
     const rf = s.sheetOpened ? RED : "#A09284";
+    const steps = known ? ["PayPayの「送る」を開く", "履歴の" + org + "さんを選ぶ", "¥" + yen(total) + " を送る"] : ["PayPayの「送る」→ 検索にIDを貼り付け", org + "さんを選ぶ", "¥" + yen(total) + " を送る"];
     return html`
       <div onClick=${close} style="position:fixed;inset:0;background:rgba(26,26,26,0.45);z-index:20;display:flex;align-items:flex-end;justify-content:center">
-        <div onClick=${(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="PayPayで支払う" style="width:100%;max-width:480px;background:#FFFFFF;border-radius:22px 22px 0 0;padding:12px 20px calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px;box-sizing:border-box">
+        <div onClick=${(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="PayPayで支払う" style="width:100%;max-width:480px;max-height:92vh;overflow-y:auto;background:#FFFFFF;border-radius:22px 22px 0 0;padding:12px 20px calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:16px;box-sizing:border-box">
           <div style="width:40px;height:4px;border-radius:2px;background:#EAE2D8;align-self:center"></div>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:17px;font-weight:700">PayPayで支払う</span>
             <button onClick=${close} aria-label="閉じる" style="width:36px;height:36px;border:none;border-radius:50%;background:#F4EEE6;font-size:18px;color:#7A6A5E;cursor:pointer">×</button>
           </div>
-          <div style="background:#F3EADF;border-radius:16px;padding:20px 16px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px">
+          <div style="background:#F3EADF;border-radius:16px;padding:20px 16px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px">
             <${CupRed} />
-            <span style="font-size:12px;color:#7A6A5E">${this.nameOf(o.userId)}さん → ${org}さん</span>
-            <span style="font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1.1">¥${yen(o.price)}</span>
-            <span style="font-size:12px;color:#7A6A5E">${this.short(o)}</span>
-            <button onClick=${copyPrice} style="margin-top:4px;height:30px;padding:0 12px;border-radius:15px;border:1px solid #D8C2AC;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer">金額をコピー</button>
+            <span style="font-size:12px;color:#7A6A5E">${me.name}さん → ${org}さん${items.length > 1 ? "（" + items.length + "件まとめて）" : ""}</span>
+            <span style="font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1.1">¥${yen(total)}</span>
+            ${items.length === 1
+              ? html`<span style="font-size:12px;color:#7A6A5E">${this.short(items[0].o)}</span>`
+              : html`<div style="align-self:stretch;display:flex;flex-direction:column;gap:2px;margin-top:4px">${items.map(
+                  (x) => html`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#7A6A5E"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.p.title} ${this.short(x.o)}</span><span style="font-variant-numeric:tabular-nums;flex:none">¥${yen(x.o.price)}</span></div>`
+                )}</div>`}
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <button onClick=${() => copyText(String(total), "¥" + yen(total) + " をコピーしました")} style="height:30px;padding:0 12px;border-radius:15px;border:1px solid #D8C2AC;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer">金額をコピー</button>
+              <button onClick=${() => copyText(payId, "ID「" + payId + "」をコピーしました")} style="height:30px;padding:0 12px;border-radius:15px;border:1px solid #D8C2AC;background:#FFFFFF;color:#7A6A5E;font-size:12px;font-weight:700;cursor:pointer">IDをコピー</button>
+            </div>
           </div>
+          <ol style="margin:0;padding:0 4px;list-style:none;display:flex;flex-direction:column;gap:4px">
+            ${known ? html`<li style="font-size:11px;font-weight:700;color:#3F7A3A;margin-bottom:2px">前にも送った相手です。IDの入力はいりません</li>` : null}
+            ${steps.map((t, i) => html`<li style="font-size:12px;color:#3E2A20;display:flex;gap:8px"><span style="color:#A0643C;font-weight:700;font-variant-numeric:tabular-nums">${i + 1}.</span>${t}</li>`)}
+          </ol>
           <div style="display:flex;flex-direction:column;gap:10px">
-            <button onClick=${openPayPay} class="hv-red" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px">1</span>IDをコピーしてPayPayを開く</button>
-            <button onClick=${report} aria-disabled=${!s.sheetOpened} style="height:54px;border:1.5px solid ${rb};border-radius:27px;background:#FFFFFF;color:${rf};font-size:15px;font-weight:700;cursor:${s.sheetOpened ? "pointer" : "default"};display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:${rb};color:#FFFFFF;font-size:12px;line-height:22px">2</span>送金しました（報告する）</button>
+            <button onClick=${openPayPay} class="hv-red" style="height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:#FFFFFF;color:#EF2027;font-size:12px;line-height:22px">1</span>${known ? "PayPayを開く" : "IDをコピーしてPayPayを開く"}</button>
+            <button onClick=${report} aria-disabled=${!s.sheetOpened} class=${s.sheetBack ? "pulse" : ""} style="height:54px;border:1.5px solid ${rb};border-radius:27px;background:${s.sheetBack ? RED : "#FFFFFF"};color:${s.sheetBack ? "#FFFFFF" : rf};font-size:15px;font-weight:700;cursor:${s.sheetOpened ? "pointer" : "default"};display:flex;align-items:center;justify-content:center;gap:10px"><span style="width:22px;height:22px;border-radius:50%;background:${s.sheetBack ? "#FFFFFF" : rb};color:${s.sheetBack ? RED : "#FFFFFF"};font-size:12px;line-height:22px">2</span>送金しました（報告する）</button>
           </div>
-          <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">送り先ID：${p.paypayId}　報告後、${org}さんの確認で「確認済み」になります。</div>
+          <div style="font-size:11px;color:#A09284;line-height:1.6;text-align:center">送り先ID：${payId}　報告後、${org}さんの確認で「確認済み」になります。</div>
         </div>
       </div>`;
   }

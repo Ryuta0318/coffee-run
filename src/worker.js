@@ -86,6 +86,11 @@ export class Hub extends DurableObject {
       this.sql.exec("ALTER TABLE profiles ADD COLUMN photo INTEGER NOT NULL DEFAULT 0");
     } catch {}
     this.sql.exec("CREATE TABLE IF NOT EXISTS photos(uid TEXT PRIMARY KEY, mime TEXT, data BLOB, ts INTEGER)");
+    // 受付終了（手動・締切時刻）の通知を送ったか。列を足したときは、もう終わっている投稿には送らない
+    try {
+      this.sql.exec("ALTER TABLE posts ADD COLUMN notified_close INTEGER NOT NULL DEFAULT 0");
+      this.sql.exec("UPDATE posts SET notified_close=1 WHERE closed=1 OR deadline_at<=?", Date.now());
+    } catch {}
     const v = this.one("SELECT v FROM kv WHERE k='menu_version'");
     if (!v || Number(v.v) < MENU_VERSION) {
       for (const store of Object.keys(MENU)) this.replaceMenu(store, MENU[store]);
@@ -371,6 +376,8 @@ export class Hub extends DurableObject {
       const u = need();
       const p = this.needPost(m[1]);
       if (p.organizer_id !== u.id) throw new HttpError(403, "organizer_only");
+      const who = this.q("SELECT user_id FROM orders WHERE post_id=? AND user_id!=?", p.id, u.id).map((r) => r.user_id);
+      this.pushUsers(who, { t: "COFFEE RUN", b: `投稿が削除されました｜${u.name}さんの ${p.title}`, u: "/", g: "post-" + p.id });
       this.run("DELETE FROM orders WHERE post_id=?", p.id);
       this.run("DELETE FROM messages WHERE post_id=?", p.id);
       this.run("DELETE FROM posts WHERE id=?", p.id);
@@ -387,6 +394,8 @@ export class Hub extends DurableObject {
       const closed = !!b.closed;
       if (!closed && Date.now() >= p.deadline_at) throw bad("past_deadline");
       this.run("UPDATE posts SET closed=? WHERE id=?", closed ? 1 : 0, p.id);
+      if (closed) this.notifyClosed(this.needPost(p.id));
+      else this.run("UPDATE posts SET notified_close=0 WHERE id=?", p.id);
       this.sendPost(p.id);
       await this.scheduleAlarm();
       return json({ post: this.postOut(p.id) });
@@ -419,6 +428,10 @@ export class Hub extends DurableObject {
       } catch {}
       last[p.store] = { itemId: o.itemId, size: o.size, temp: o.temp, note: o.note, mode: o.mode, customName: o.itemId === "_other" ? o.name : "", customPrice: o.itemId === "_other" ? o.price : 0 };
       this.run("UPDATE profiles SET last_orders=? WHERE id=?", JSON.stringify(last), u.id);
+      if (u.id !== p.organizer_id) {
+        const line = o.itemId === "_other" ? o.name + " " + o.temp : o.name + " " + o.sizeLabel + " " + o.temp;
+        this.pushTo(p.organizer_id, { t: `${u.name}さんが注文${prev ? "を変更" : ""}しました`, b: `${line}${o.note ? "（" + o.note + "）" : ""} ¥${yen(o.price)}｜${p.title}`, u: "/?p=" + p.id + "&tab=list", g: "order-" + p.id + "-" + u.id });
+      }
       this.sendPost(p.id);
       return json({ post: this.postOut(p.id), me: this.meOut(this.one("SELECT * FROM profiles WHERE id=?", u.id)), changed: !!prev });
     }
@@ -432,6 +445,8 @@ export class Hub extends DurableObject {
       // 本人は受付中だけ取り消せる。投稿者はいつでも
       if (!isOrg && !(o.user_id === u.id && !this.locked(p))) throw new HttpError(403, "forbidden");
       this.run("DELETE FROM orders WHERE id=?", o.id);
+      if (isOrg && o.user_id !== u.id) this.pushTo(o.user_id, { t: "COFFEE RUN", b: `注文が取り消されました｜${p.title}（${o.item_name}）`, u: "/?p=" + p.id, g: "order-" + p.id + "-" + o.user_id });
+      else if (!isOrg) this.pushTo(p.organizer_id, { t: `${u.name}さんが注文を取り消しました`, b: `${o.item_name}｜${p.title}`, u: "/?p=" + p.id + "&tab=list", g: "order-" + p.id + "-" + u.id });
       this.sendPost(p.id);
       return json({ post: this.postOut(p.id) });
     }
@@ -453,6 +468,10 @@ export class Hub extends DurableObject {
       this.sendPost(p.id);
       if (to === "reported") {
         this.pushTo(p.organizer_id, { t: "COFFEE RUN", b: `${this.nameOf(u.id)}さんが ¥${yen(o.price)} の送金を報告しました｜${p.title}`, u: "/?p=" + p.id + "&tab=pay", g: "pay-" + p.id });
+      } else if (to === "done") {
+        this.pushTo(o.user_id, { t: "COFFEE RUN", b: `✓ ${u.name}さんが入金を確認しました｜${p.title} ¥${yen(o.price)}`, u: "/?p=" + p.id + "&tab=pay", g: "pay-" + p.id });
+      } else if (to === "unpaid") {
+        this.pushTo(o.user_id, { t: "COFFEE RUN", b: `入金の確認が取り消されました。もう一度送金してください｜${p.title} ¥${yen(o.price)}`, u: "/?p=" + p.id + "&tab=pay&pay=1", g: "pay-" + p.id });
       }
       return json({ post: this.postOut(p.id) });
     }
@@ -476,6 +495,10 @@ export class Hub extends DurableObject {
       if (!text) throw bad("text");
       this.limit("msg:" + u.id, 60, 60e3);
       this.run("INSERT INTO messages(id,post_id,user_id,text,created_at) VALUES(?,?,?,?,?)", rid(8), p.id, u.id, text, Date.now());
+      // 投稿者・注文した人・このチャットに書いた人へ（自分以外）
+      const who = new Set([p.organizer_id, ...this.q("SELECT user_id FROM orders WHERE post_id=?", p.id).map((r) => r.user_id), ...this.q("SELECT DISTINCT user_id FROM messages WHERE post_id=?", p.id).map((r) => r.user_id)]);
+      who.delete(u.id);
+      this.pushUsers([...who], { t: `${u.name}｜${p.title}`, b: text.slice(0, 140), u: "/?p=" + p.id + "&tab=chat", g: "chat-" + p.id });
       this.sendPost(p.id);
       return json({ post: this.postOut(p.id) });
     }
@@ -492,6 +515,13 @@ export class Hub extends DurableObject {
       this.run("DELETE FROM push_subs WHERE endpoint=?", endpoint);
       this.run("INSERT INTO push_subs(id,uid,endpoint,p256dh,auth,ts) VALUES(?,?,?,?,?,?)", rid(8), u.id, endpoint, keys.p256dh.slice(0, 200), keys.auth.slice(0, 100), Date.now());
       return json({ ok: true });
+    }
+    if (path === "/api/push/test" && method === "POST") {
+      const u = need();
+      this.limit("ptest:" + u.id, 10, 600e3);
+      const subs = this.q("SELECT * FROM push_subs WHERE uid=?", u.id);
+      const results = subs.length ? await this.deliver(subs, { t: "COFFEE RUN", b: "テスト通知です。これが見えていれば、通知は届きます ☕", u: "/?v=profile", g: "test" }) : [];
+      return json({ devices: subs.length, ok: results.filter(Boolean).length });
     }
     if (path === "/api/push/unsubscribe" && method === "POST") {
       const u = need();
@@ -594,6 +624,27 @@ export class Hub extends DurableObject {
     const subs = this.q("SELECT * FROM push_subs WHERE uid=?", uid);
     if (subs.length) this.ctx.waitUntil(this.deliver(subs, payload));
   }
+  pushUsers(uids, payload) {
+    const list = [...new Set(uids)].filter(Boolean);
+    if (!list.length) return Promise.resolve();
+    const subs = this.q(`SELECT * FROM push_subs WHERE uid IN (${list.map(() => "?").join(",")})`, ...list);
+    if (!subs.length) return Promise.resolve();
+    const done = this.deliver(subs, payload);
+    this.ctx.waitUntil(done);
+    return done;
+  }
+  // 受付終了：注文した人に「¥380 を払ってね」（1つの投稿につき1回）
+  notifyClosed(p) {
+    if (p.notified_close) return Promise.resolve();
+    this.run("UPDATE posts SET notified_close=1 WHERE id=?", p.id);
+    const org = this.nameOf(p.organizer_id);
+    const sends = this.q("SELECT * FROM orders WHERE post_id=? AND user_id!=?", p.id, p.organizer_id).map((o) =>
+      o.status === "unpaid"
+        ? this.pushUsers([o.user_id], { t: "受付終了｜" + p.title, b: `${org}さんへ ¥${yen(o.price)} を PayPay で送ってください（${o.item_name}）`, u: "/?p=" + p.id + "&tab=pay&pay=1", g: "pay-" + p.id })
+        : this.pushUsers([o.user_id], { t: "受付終了｜" + p.title, b: `${org}さんが${STORES[p.store].label}に向かいます`, u: "/?p=" + p.id, g: "post-" + p.id })
+    );
+    return Promise.all(sends);
+  }
   pushAll(payload, exceptUid) {
     const subs = this.q("SELECT * FROM push_subs WHERE uid!=?", exceptUid || "");
     if (!subs.length) return Promise.resolve();
@@ -601,18 +652,31 @@ export class Hub extends DurableObject {
     this.ctx.waitUntil(done);
     return done;
   }
+  // 端末ごとに送る。電波がない端末にも1日以内なら届く（TTL）。一時的な失敗は2回まで送り直す。
+  // 返り値は端末ごとに届けられたか（true / false）
   async deliver(subs, payload) {
     const vapid = await this.getVapid();
     const body = JSON.stringify(payload);
-    await Promise.all(
+    return Promise.all(
       subs.map(async (sub) => {
-        try {
-          const code = await sendPush(sub, body, vapid, this.pushSubject(), { urgency: "high", ttl: 1800 });
-          if (code === 404 || code === 410) this.run("DELETE FROM push_subs WHERE id=?", sub.id);
-          else if (code >= 400) console.error("push status", code);
-        } catch (e) {
-          console.error("push fail", String(e));
+        for (let i = 0; i < 3; i++) {
+          try {
+            const code = await sendPush(sub, body, vapid, this.pushSubject(), { urgency: "high", ttl: 86400 });
+            if (code >= 200 && code < 300) return true;
+            if (code === 404 || code === 410) {
+              this.run("DELETE FROM push_subs WHERE id=?", sub.id); // その端末の購読は切れている（次に開いたときに作り直す）
+              return false;
+            }
+            if (code !== 429 && code < 500) {
+              console.error("push status", code);
+              return false;
+            }
+          } catch (e) {
+            console.error("push fail", String(e));
+          }
+          await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
         }
+        return false;
       })
     );
   }
@@ -621,8 +685,10 @@ export class Hub extends DurableObject {
   // 対象: deadline - 5分 <= now < deadline かつ未通知・未締切
   async scheduleAlarm() {
     const now = Date.now();
-    const r = this.one("SELECT MIN(deadline_at) d FROM posts WHERE notified_5min=0 AND closed=0 AND deadline_at>?", now);
-    if (r && r.d) await this.ctx.storage.setAlarm(Math.max(now + 1000, r.d - 5 * MIN));
+    const a = this.one("SELECT MIN(deadline_at) d FROM posts WHERE notified_5min=0 AND closed=0 AND deadline_at>?", now);
+    const b = this.one("SELECT MIN(deadline_at) d FROM posts WHERE notified_close=0 AND closed=0");
+    const times = [a && a.d ? a.d - 5 * MIN : null, b && b.d ? b.d : null].filter((x) => x !== null);
+    if (times.length) await this.ctx.storage.setAlarm(Math.max(now + 1000, Math.min(...times)));
     else await this.ctx.storage.deleteAlarm();
   }
   async alarm() {
@@ -634,6 +700,8 @@ export class Hub extends DurableObject {
         this.run("UPDATE posts SET notified_5min=1 WHERE id=?", p.id);
         sending.push(this.pushAll({ t: "COFFEE RUN", b: `締切まであと5分｜${p.title} ${STORES[p.store].label}`, u: "/?p=" + p.id, g: "post-" + p.id }));
       }
+      // 締切時刻が来た投稿：注文した人へ「受付終了・支払いのお願い」
+      for (const p of this.q("SELECT * FROM posts WHERE notified_close=0 AND closed=0 AND deadline_at<=?", now)) sending.push(this.notifyClosed(p));
       await Promise.all(sending);
     } catch (e) {
       console.error("alarm", String(e));

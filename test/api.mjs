@@ -169,12 +169,47 @@ if (ADMIN) {
   await org("/api/admin/menu", { method: "PUT", body: { store: "mammoth", items: cur.menu.mammoth }, headers: H });
 }
 
+step("すべての出来事が通知される（注文・チャット・受付終了・入金確認・テスト通知）");
+await other("/api/push/subscribe", { method: "POST", body: await fakeSub("other") });
+const n = (path) => got.filter((g) => g.path === path).length;
+const waitFor = async (cond, ms = 8000) => { const t = Date.now(); while (Date.now() - t < ms && !cond()) await new Promise((r) => setTimeout(r, 200)); return cond(); };
+const dl2 = Math.ceil((Date.now() + 20 * MIN) / MIN) * MIN;
+const p2 = (await org("/api/posts", { method: "POST", body: { title: "通知テスト", store: "sbux", deadline: dl2, depart: dl2 } })).post;
+let o0 = n("/org"), m0 = n("/mem"), x0 = n("/other");
+await mem(`/api/posts/${p2.id}/order`, { method: "PUT", body: { itemId: "latte", size: 1 } });
+assert.ok(await waitFor(() => n("/org") === o0 + 1), "注文 → 投稿者へ");
+o0 = n("/org"); m0 = n("/mem"); x0 = n("/other");
+await other(`/api/posts/${p2.id}/messages`, { method: "POST", body: { text: "1階で待ってます" } });
+assert.ok(await waitFor(() => n("/org") === o0 + 1 && n("/mem") === m0 + 1), "チャット → 投稿者と注文した人へ");
+assert.equal(n("/other"), x0, "自分には送らない");
+o0 = n("/org"); m0 = n("/mem"); x0 = n("/other");
+await org(`/api/posts/${p2.id}/messages`, { method: "POST", body: { text: "了解" } });
+assert.ok(await waitFor(() => n("/other") === x0 + 1 && n("/mem") === m0 + 1), "チャットに書いた人にも届く");
+m0 = n("/mem");
+await org(`/api/posts/${p2.id}/close`, { method: "POST", body: { closed: true } });
+assert.ok(await waitFor(() => n("/mem") === m0 + 1), "受付終了 → 注文した人へ（支払いのお願い）");
+const om = (await org("/api/boot")).posts.find((x) => x.id === p2.id).orders.find((x) => x.userId === m.me.id);
+await mem(`/api/orders/${om.id}/status`, { method: "POST", body: { status: "reported" } });
+m0 = n("/mem");
+await org(`/api/orders/${om.id}/status`, { method: "POST", body: { status: "done" } });
+assert.ok(await waitFor(() => n("/mem") === m0 + 1), "入金確認 → 払った人へ");
+const tp = await mem("/api/push/test", { method: "POST" });
+assert.deepEqual([tp.devices, tp.ok], [1, 1], "テスト通知");
+
+step("締切時刻が来たら、自動で「受付終了」の通知（1分ほど待つ）");
+const dl3 = Math.ceil((Date.now() + 10e3) / MIN) * MIN;
+const p3 = (await org("/api/posts", { method: "POST", body: { title: "自動締切", store: "mammoth", deadline: dl3, depart: dl3 } })).post;
+await mem(`/api/posts/${p3.id}/order`, { method: "PUT", body: { itemId: "latte", size: 1 } });
+await new Promise((r) => setTimeout(r, Math.max(0, dl3 - Date.now() - 1500)));
+m0 = n("/mem");
+assert.ok(await waitFor(() => n("/mem") >= m0 + 1, 20000), "締切時刻に受付終了の通知");
+
 step("投稿の削除は投稿者だけ（注文・チャットも消える）");
 assert.equal((await mem(`/api/posts/${post.id}`, { method: "DELETE" })).status, 403);
 assert.equal((await org(`/api/posts/${post.id}`, { method: "DELETE" })).ok, true);
 assert.equal((await org("/api/boot")).posts.some((p) => p.id === post.id), false);
 assert.equal((await mem(`/api/posts/${post.id}/messages`, { method: "POST", body: { text: "x" } })).status, 404);
-assert.deepEqual((await mem("/api/me")).me.stats, { count: 0, due: 0 }, "消した投稿の注文は集計に残らない");
+assert.deepEqual((await mem("/api/me")).me.stats, { count: 2, due: 380 }, "消した投稿の注文は集計に残らない（残るのは通知テストの2件）");
 
 srv.close();
 console.log("OK");

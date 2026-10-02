@@ -154,6 +154,25 @@ async function pushEnable() {
   await api("/api/push/subscribe", { method: "POST", body: { endpoint: j.endpoint, keys: j.keys } });
   return "granted";
 }
+// 許可済みなら、購読を確かめて（無ければ作り直して）サーバーに登録し直す。
+// 購読はいつのまにか切れることがあるので、アプリを開くたびに呼ぶ
+async function pushSync() {
+  if (!pushSupport().ok || Notification.permission !== "granted") return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const k = await api("/api/push/key");
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToU8(k.key) });
+    }
+    const j = sub.toJSON();
+    await api("/api/push/subscribe", { method: "POST", body: { endpoint: j.endpoint, keys: j.keys } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const iosOld = () => isIOS() && standalone() && !("PushManager" in window); // iOS 16.3 以前
 async function pushDisable() {
   const sub = await pushCurrent();
   if (!sub) return;
@@ -267,7 +286,7 @@ class App extends Component {
       chatText: "",
       form: { mode: "ask", cat: "all", itemId: "", size: 1, temp: "HOT", note: "", otherName: "", otherPrice: "" },
       busy: false,
-      push: { support: pushSupport(), on: false, dismissed: ls.get("coffeeRun.pushDismissed") === "1" },
+      push: { support: pushSupport(), on: false, perm: "Notification" in window ? Notification.permission : "none", asked: false, dismissed: ls.get("coffeeRun.pushDismissed") === "1" },
       online: true,
     };
   }
@@ -281,6 +300,7 @@ class App extends Component {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible" && this.state.me) {
         this.refresh();
+        if (Date.now() - (this._lastSync || 0) > 10 * 60e3) this.syncPush();
         if (!this.ws || this.ws.readyState > 1) this.connect();
       }
     });
@@ -290,7 +310,7 @@ class App extends Component {
         if (e.data && e.data.type === "go") this.openUrl(e.data.url);
       });
     }
-    pushCurrent().then((s) => this.setPush({ on: !!s }));
+    pushCurrent().then((s) => this.setPush({ on: !!s, perm: "Notification" in window ? Notification.permission : "none" }));
   }
   componentDidUpdate(_, prev) {
     // チャットは新しいメッセージが来たら一番下へ
@@ -304,6 +324,19 @@ class App extends Component {
       }
     }
   }
+  async syncPush() {
+    this._lastSync = Date.now();
+    const ok = await pushSync();
+    this.setPush({ on: ok, perm: "Notification" in window ? Notification.permission : "none" });
+  }
+  async testPush() {
+    try {
+      const r = await api("/api/push/test", { method: "POST" });
+      this.showToast(r.ok ? "テスト通知を送りました（" + r.ok + "台）" : "届けられませんでした。通知をオフ→オンにしてみてください");
+    } catch (e) {
+      this.fail(e);
+    }
+  }
   setPush(p) {
     this.setState((s) => ({ push: { ...s.push, ...p } }));
   }
@@ -312,7 +345,10 @@ class App extends Component {
     try {
       const j = await api("/api/boot");
       this.applyBoot(j);
-      if (j.me) this.connect();
+      if (j.me) {
+        this.connect();
+        this.syncPush();
+      }
       this.setState({ ready: true, bootError: false });
     } catch {
       this.setState({ bootError: true });
@@ -625,13 +661,30 @@ class App extends Component {
       } else {
         const r = await pushEnable();
         if (r === "granted") {
-          this.setPush({ on: true });
+          this.setPush({ on: true, perm: "granted", asked: true });
           this.showToast("通知をオンにしました");
-        } else this.showToast("通知が許可されませんでした。ブラウザの設定から許可してください");
+        } else {
+          this.setPush({ perm: Notification.permission, asked: true });
+          this.showToast("通知が許可されませんでした。下の手順で許可してください");
+        }
       }
     } catch (e) {
       this.fail(e);
     }
+  }
+  // ホーム画面のアプリで最初に出す「通知をオンに」（iPhone はボタンを押したときにしか許可を求められない）
+  pushPrompt() {
+    const later = () => this.setPush({ asked: true });
+    return html`
+      <div style="position:fixed;inset:0;background:rgba(26,26,26,0.45);z-index:25;display:flex;align-items:flex-end;justify-content:center">
+        <div role="dialog" aria-modal="true" aria-label="通知をオンにする" style="width:100%;max-width:480px;background:#FFFFFF;border-radius:22px 22px 0 0;padding:22px 20px calc(26px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px;box-sizing:border-box;text-align:center;align-items:center">
+          <${CupRed} />
+          <span style="font-size:19px;font-weight:700">通知をオンにしよう</span>
+          <span style="font-size:13px;color:#7A6A5E;line-height:1.7">新しい投稿・締切5分前・チャット・注文・受付終了と支払いのお願い・入金の確認を、すべてお知らせします</span>
+          <button onClick=${() => this.togglePush()} class="hv-red" style="align-self:stretch;height:54px;border:none;border-radius:27px;background:#EF2027;color:#FFFFFF;font-size:16px;font-weight:700;cursor:pointer">オンにする</button>
+          <button onClick=${later} style="height:40px;border:none;background:transparent;color:#A09284;font-size:13px;cursor:pointer">あとで</button>
+        </div>
+      </div>`;
   }
   dismissPush() {
     ls.set("coffeeRun.pushDismissed", "1");
@@ -664,6 +717,7 @@ class App extends Component {
           ${v.isCompose ? this.composeView(v) : null}
           ${v.isDetail ? this.detailView(v) : null}
           ${s.sheetIds && s.sheetIds.length ? this.sheetView() : null}
+          ${s.me && !s.splash && !s.toast && s.push.support.ok && standalone() && s.push.perm === "default" && !s.push.asked ? this.pushPrompt() : null}
           ${s.splash ? html`<${Splash} key=${"sp" + s.splashKey} onSkip=${() => this.setState({ splash: false })} />` : null}
           ${s.toast
             ? html`<div role="status" aria-live="polite" style="position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2A1810;color:#FFFFFF;padding:10px 18px 10px 10px;border-radius:24px;font-size:13px;z-index:30;max-width:90vw;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:flex;align-items:center;gap:10px">
@@ -737,7 +791,7 @@ class App extends Component {
     const list = all.filter((x) => s.filter === "all" || (s.filter === "open" ? !isLocked(x.p) : x.c.unpaid.length + x.c.reported.length > 0));
     const debts = this.myDebts();
     const ps = s.push;
-    const showPushCard = !ps.on && !ps.dismissed && (ps.support.ok ? Notification.permission !== "denied" : ps.support.why === "ios");
+    const showPushCard = !ps.on && !ps.dismissed && (ps.support.ok ? true : ps.support.why === "ios");
     return html`
       <main data-screen-label="フィード" style="display:flex;flex-direction:column">
         <button onClick=${() => this.go("compose", { draft: this.newDraft() })} style="display:flex;align-items:center;gap:12px;padding:16px 20px;border:none;border-bottom:1px solid #F4EEE6;background:#FFFFFF;cursor:pointer;text-align:left">
@@ -751,10 +805,12 @@ class App extends Component {
 
         ${showPushCard
           ? html`<div style="margin:12px 20px 0;padding:12px 12px 12px 14px;background:#F3EADF;border-radius:14px;display:flex;align-items:center;gap:10px">
-              <span style="flex:1;min-width:0;font-size:12px;line-height:1.6;color:#3E2A20">${ps.support.ok
-                ? html`<b style="color:#2C1710">通知をオンにしよう</b><br />新しい投稿と、締切5分前にお知らせします`
+              <span style="flex:1;min-width:0;font-size:12px;line-height:1.6;color:#3E2A20">${ps.support.ok && ps.perm === "denied"
+                ? html`<b style="color:#A3161B">通知がブロックされています</b><br />${isIOS() ? "iPhone の「設定」→「通知」→「COFFEE RUN」で許可して、開き直してください" : "ブラウザ（またはアプリ情報）の「通知」を許可にして、開き直してください"}`
+                : ps.support.ok
+                ? html`<b style="color:#2C1710">通知をオンにしよう</b><br />新しい投稿・チャット・注文・支払いのお願いまで、すべてお知らせします`
                 : html`<b style="color:#2C1710">iPhoneで通知を受け取るには</b><br />共有ボタン →「ホーム画面に追加」して、そのアイコンから開いてください`}</span>
-              ${ps.support.ok
+              ${ps.support.ok && ps.perm !== "denied"
                 ? html`<button onClick=${() => this.togglePush()} class="hv-red" style="height:32px;padding:0 14px;border-radius:16px;border:none;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;cursor:pointer;flex:none">オンにする</button>`
                 : null}
               <button onClick=${() => this.dismissPush()} aria-label="閉じる" class="hv-txt" style="width:32px;height:32px;border:none;border-radius:50%;background:transparent;color:#A09284;font-size:16px;cursor:pointer;flex:none">×</button>
@@ -955,11 +1011,15 @@ class App extends Component {
               <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
                 <span style="font-size:13px;font-weight:700;color:#2C1710">通知</span>
                 <span style="font-size:11px;color:#7A6A5E;line-height:1.5">${ps.support.ok
-                  ? ps.on ? "オン：新しい投稿・締切5分前・精算のお知らせ" : "オフ"
-                  : ps.support.why === "ios" ? "ホーム画面に追加して開くと使えます" : "このブラウザは対応していません"}</span>
+                  ? ps.perm === "denied" ? html`<span style="color:#A3161B;font-weight:700">この端末で通知がブロックされています</span>` : ps.on ? "オン：投稿・チャット・注文・受付終了・支払いのすべて" : "オフ"
+                  : ps.support.why === "ios" ? "ホーム画面に追加して、そのアイコンから開くと使えます" : iosOld() ? "iOS 16.4 以上に更新すると使えます" : "このブラウザは対応していません"}</span>
+                ${ps.support.ok && ps.perm === "denied" ? html`<span style="font-size:11px;color:#7A6A5E;line-height:1.6;margin-top:4px">${isIOS() ? "iPhone の「設定」→「通知」→「COFFEE RUN」→「通知を許可」をオンにしてから、アプリを開き直してください" : "ブラウザのアドレスバーの🔒（またはアプリ情報）→「通知」→「許可」にしてから、開き直してください"}</span>` : null}
               </div>
-              ${ps.support.ok
-                ? html`<button onClick=${() => this.togglePush()} style="height:32px;padding:0 12px;border-radius:16px;border:1px solid ${ps.on ? "#D6CCC0" : RED};background:#FFFFFF;color:${ps.on ? "#7A6A5E" : RED};font-size:12px;font-weight:700;cursor:pointer;flex:none">${ps.on ? "オフにする" : "オンにする"}</button>`
+              ${ps.support.ok && ps.perm !== "denied"
+                ? html`<div style="display:flex;flex-direction:column;gap:6px;flex:none">
+                    <button onClick=${() => this.togglePush()} style="height:32px;padding:0 12px;border-radius:16px;border:1px solid ${ps.on ? "#D6CCC0" : RED};background:#FFFFFF;color:${ps.on ? "#7A6A5E" : RED};font-size:12px;font-weight:700;cursor:pointer">${ps.on ? "オフにする" : "オンにする"}</button>
+                    ${ps.on ? html`<button onClick=${() => this.testPush()} style="height:32px;padding:0 12px;border-radius:16px;border:1px solid #D6CCC0;background:#FFFFFF;color:#3E2A20;font-size:12px;font-weight:700;cursor:pointer">テスト通知</button>` : null}
+                  </div>`
                 : null}
             </div>`
           : null}

@@ -28,6 +28,15 @@
   - iPhone は Safari の共有ボタン →「ホーム画面に追加」して、そのアイコンから開いたときに使えます（iOS 16.4 以上）。フィードに案内が出ます
 - **ホーム画面に追加**（PWA）・起動アニメーション（タップで飛ばせる。ヘッダーのロゴで再生）
 
+## 使い方マニュアル（画像）
+
+みんなに配る用の画像です（Slack・Teams にそのまま貼れます）。
+
+- `docs/manual/01-hajimekata.png` … ホーム画面への追加と、通知をオンにする手順（iPhone / Android）
+- `docs/manual/02-tsukaikata.png` … アプリの使い方（投稿 → 注文 → 受け取り → PayPay で精算）
+
+1枚目の QR コードと URL は `https://coffee-run.ryuta-suzuki.workers.dev` です。公開先が違う場合は作り直してください。
+
 ## しくみ
 
 ハンドオフの推奨は Next.js + Supabase + Vercel でしたが、**Cloudflare Workers 1つ**で作っています（DARA と同じ構成）。外部サービスのアカウントや鍵の設定が要らず、`wrangler deploy` だけで公開できます。

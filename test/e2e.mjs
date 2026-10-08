@@ -92,8 +92,8 @@ await B.click('main button:has-text("注文する")');
 await B.waitForSelector("text=注文を受け付けました");
 await B.waitForSelector("text=注文済み");
 
-step("サイズが無い組み合わせは選べない（ハニーラテ L）");
-await B.click('button:has-text("ハニーラテ")');
+step("サイズが無い組み合わせは選べない（スイートミルクラテ L）");
+await B.click('button:has-text("スイートミルクラテ")');
 assert.equal(await B.isDisabled('main button:text-is("L")'), true);
 await B.click('button:has-text("カフェラテ")');
 

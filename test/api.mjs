@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { b64u } from "../src/push.js";
+import { MENU } from "../src/menu-data.js";
 
 const BASE = process.argv[2] || "http://127.0.0.1:8787";
 const ADMIN = (() => {
@@ -99,11 +100,11 @@ assert.equal(post.body, "マンモスコーヒー行きますが皆さんいけ�
 assert.equal(post.paypayId, "kanji-kc");
 
 step("注文（金額はサーバーがメニューから決める）");
-let r = await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "honey", size: 2, temp: "ICED", mode: "go", note: "氷少なめ", price: 1 } });
+let r = await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "m_m424ntne", size: 2, temp: "ICED", mode: "go", note: "氷少なめ", price: 1 } });
 assert.equal(r.status, 200);
 let mine = r.post.orders.find((x) => x.userId === m.me.id);
-assert.deepEqual([mine.name, mine.sizeLabel, mine.temp, mine.price, mine.status, mine.mode], ["ハニーラテ", "M", "ICED", 430, "unpaid", "go"], "L が無いので M に寄せる");
-assert.equal(r.me.last.mammoth.itemId, "honey", "いつもの");
+assert.deepEqual([mine.name, mine.sizeLabel, mine.temp, mine.price, mine.status, mine.mode], ["スイートミルクラテ", "M", "ICED", 450, "unpaid", "go"], "L が無いので M に寄せる");
+assert.equal(r.me.last.mammoth.itemId, "m_m424ntne", "いつもの");
 r = await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "snow", size: 0, temp: "HOT" } });
 mine = r.post.orders.find((x) => x.userId === m.me.id);
 assert.equal(r.post.orders.length, 1, "1人1注文（上書き）");
@@ -158,7 +159,7 @@ if (ADMIN) {
   assert.equal((await org("/api/admin/menu")).status, 401);
   const H = { authorization: "Bearer " + ADMIN };
   const cur = await org("/api/admin/menu", { headers: H });
-  assert.equal(cur.menu.mammoth.length, 17);
+  assert.equal(cur.menu.mammoth.length, MENU.mammoth.length);
   const items = cur.menu.mammoth.map((x) => (x.id === "americano" ? { ...x, p: [200, 260, 410] } : x));
   r = await org("/api/admin/menu", { method: "PUT", body: { store: "mammoth", items }, headers: H });
   assert.equal(r.menu.mammoth.find((x) => x.id === "americano").p[0], 200);

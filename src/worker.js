@@ -28,6 +28,8 @@ const oneLine = (v, max) => str(typeof v === "string" ? v.replace(/[\r\n]+/g, " 
 
 const COLORS = ["#EF2027", "#A0643C", "#C49A78", "#2C1710", "#3F7A3A"];
 const MODES = ["go", "ask"];
+// 受け取りに行く人への袋代。「お願いします！」の注文だけにのせる（「一緒に行ける！」の人と投稿者自身の分にはのせない）
+const BAG_FEE = 10;
 const PHOTO_MAX = 300 * 1024;
 // 中身の先頭のバイトで画像の種類を見分ける（content-type だけを信じない）
 function sniff(b) {
@@ -90,6 +92,10 @@ export class Hub extends DurableObject {
     try {
       this.sql.exec("ALTER TABLE posts ADD COLUMN notified_close INTEGER NOT NULL DEFAULT 0");
       this.sql.exec("UPDATE posts SET notified_close=1 WHERE closed=1 OR deadline_at<=?", Date.now());
+    } catch {}
+    // 袋代（price は袋代込みの支払い額。fee はそのうちの袋代）
+    try {
+      this.sql.exec("ALTER TABLE orders ADD COLUMN fee INTEGER NOT NULL DEFAULT 0");
     } catch {}
     const v = this.one("SELECT v FROM kv WHERE k='menu_version'");
     if (!v || Number(v.v) < MENU_VERSION) {
@@ -216,6 +222,7 @@ export class Hub extends DurableObject {
         temp: o.temp,
         note: o.note,
         price: o.price,
+        fee: o.fee || 0,
         status: o.status,
       })),
       msgs: msgs.filter((m) => m.post_id === r.id).map((m) => ({ id: m.id, userId: m.user_id, text: m.text, ts: m.created_at })),
@@ -279,6 +286,21 @@ export class Hub extends DurableObject {
       const profiles = {};
       for (const p of this.q("SELECT * FROM profiles")) profiles[p.id] = this.profileOut(p);
       return json({ now: Date.now(), me: this.meOut(me), profiles, posts: me ? this.postsOut(rows) : [], menu: this.menu(), stores: STORES });
+    }
+
+    // ---- ランキング（メンバー全員。消した投稿の分は数えない）----
+    //   cups … 注文した杯数（投稿者として自分の分を頼んだものも含む）
+    //   hosted … 投稿して受け取りに行った回数（受付が終わっていて、注文が1杯以上あったもの）
+    //   went … 「一緒に行ける！」で受け取りに行った回数（受付が終わったもの）
+    if (path === "/api/ranking" && method === "GET") {
+      need();
+      const now = Date.now();
+      const by = (rows) => Object.fromEntries(rows.map((r) => [r.uid, r.n]));
+      const cups = by(this.q("SELECT user_id uid, COUNT(*) n FROM orders GROUP BY user_id"));
+      const hosted = by(this.q("SELECT organizer_id uid, COUNT(*) n FROM posts p WHERE (p.closed=1 OR p.deadline_at<=?) AND EXISTS(SELECT 1 FROM orders o WHERE o.post_id=p.id) GROUP BY organizer_id", now));
+      const went = by(this.q("SELECT o.user_id uid, COUNT(*) n FROM orders o JOIN posts p ON p.id=o.post_id WHERE o.mode='go' AND o.user_id<>p.organizer_id AND (p.closed=1 OR p.deadline_at<=?) GROUP BY o.user_id", now));
+      const members = this.q("SELECT * FROM profiles").map((p) => ({ ...this.profileOut(p), cups: cups[p.id] || 0, hosted: hosted[p.id] || 0, went: went[p.id] || 0 }));
+      return json({ members });
     }
 
     // ---- アカウント ----
@@ -405,20 +427,21 @@ export class Hub extends DurableObject {
       const u = need();
       const p = this.needPost(m[1]);
       if (this.locked(p)) throw bad("closed");
-      const o = this.cleanOrder(p.store, await this.body(req));
+      const isOrg = u.id === p.organizer_id;
+      const o = this.cleanOrder(p.store, await this.body(req), isOrg);
       const prev = this.one("SELECT * FROM orders WHERE post_id=? AND user_id=?", p.id, u.id);
       // 投稿者は自分で立て替えるので、自分の分は最初から確認済み
-      let status = u.id === p.organizer_id ? "done" : "unpaid";
+      let status = isOrg ? "done" : "unpaid";
       if (prev && prev.price === o.price && status !== "done") status = prev.status;
       if (prev) {
         this.run(
-          "UPDATE orders SET mode=?, item_id=?, item_name=?, size_index=?, size_label=?, temp=?, note=?, price=?, status=? WHERE id=?",
-          o.mode, o.itemId, o.name, o.size, o.sizeLabel, o.temp, o.note, o.price, status, prev.id
+          "UPDATE orders SET mode=?, item_id=?, item_name=?, size_index=?, size_label=?, temp=?, note=?, price=?, fee=?, status=? WHERE id=?",
+          o.mode, o.itemId, o.name, o.size, o.sizeLabel, o.temp, o.note, o.price, o.fee, status, prev.id
         );
       } else {
         this.run(
-          "INSERT INTO orders(id,post_id,user_id,mode,item_id,item_name,size_index,size_label,temp,note,price,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          rid(8), p.id, u.id, o.mode, o.itemId, o.name, o.size, o.sizeLabel, o.temp, o.note, o.price, status, Date.now()
+          "INSERT INTO orders(id,post_id,user_id,mode,item_id,item_name,size_index,size_label,temp,note,price,fee,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          rid(8), p.id, u.id, o.mode, o.itemId, o.name, o.size, o.sizeLabel, o.temp, o.note, o.price, o.fee, status, Date.now()
         );
       }
       // 「いつもの」
@@ -428,7 +451,7 @@ export class Hub extends DurableObject {
       } catch {}
       last[p.store] = { itemId: o.itemId, size: o.size, temp: o.temp, note: o.note, mode: o.mode, customName: o.itemId === "_other" ? o.name : "", customPrice: o.itemId === "_other" ? o.price : 0 };
       this.run("UPDATE profiles SET last_orders=? WHERE id=?", JSON.stringify(last), u.id);
-      if (u.id !== p.organizer_id) {
+      if (!isOrg) {
         const line = o.itemId === "_other" ? o.name + " " + o.temp : o.name + " " + o.sizeLabel + " " + o.temp;
         this.pushTo(p.organizer_id, { t: `${u.name}さんが注文${prev ? "を変更" : ""}しました`, b: `${line}${o.note ? "（" + o.note + "）" : ""} ¥${yen(o.price)}｜${p.title}`, u: "/?p=" + p.id + "&tab=list", g: "order-" + p.id + "-" + u.id });
       }
@@ -565,8 +588,10 @@ export class Hub extends DurableObject {
     const color = COLORS.includes(b.color) ? b.color : COLORS[0];
     return { name, paypayId, color };
   }
-  cleanOrder(store, b) {
-    const mode = MODES.includes(b.mode) ? b.mode : "ask";
+  // 投稿者自身の分は「お願い」扱い（一緒に行くの一覧には出さない）で、袋代なし・支払いなし
+  cleanOrder(store, b, isOrg = false) {
+    const mode = isOrg ? "ask" : MODES.includes(b.mode) ? b.mode : "ask";
+    const fee = !isOrg && mode === "ask" ? BAG_FEE : 0;
     const note = oneLine(b.note, 80);
     const temp0 = b.temp === "ICED" ? "ICED" : "HOT";
     if (b.itemId === "_other") {
@@ -574,13 +599,13 @@ export class Hub extends DurableObject {
       const price = Math.floor(Number(String(b.customPrice ?? "").replace(/[^0-9]/g, "")));
       if (!name) throw bad("custom_name");
       if (!(price > 0 && price <= 20000)) throw bad("custom_price");
-      return { mode, note, itemId: "_other", name, size: null, sizeLabel: "", temp: temp0, price };
+      return { mode, note, itemId: "_other", name, size: null, sizeLabel: "", temp: temp0, price: price + fee, fee };
     }
     const it = this.item(store, String(b.itemId || ""));
     if (!it) throw bad("item");
     const size = fitSize(it.p, Number(b.size));
     const temp = it.t === "both" ? temp0 : it.t;
-    return { mode, note, itemId: it.id, name: it.name, size, sizeLabel: STORES[store].sizes[size], temp, price: it.p[size] };
+    return { mode, note, itemId: it.id, name: it.name, size, sizeLabel: STORES[store].sizes[size], temp, price: it.p[size] + fee, fee };
   }
   cleanMenuItem(store, x) {
     const n = STORES[store].sizes.length;

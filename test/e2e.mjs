@@ -86,7 +86,8 @@ await B.waitForSelector("text=NOW OPEN・募集中");
 await B.click('button:has-text("カフェラテ")');
 await B.click('button:text-is("ICED")');
 await B.fill("#od-note", "オーツミルク");
-assert.equal(await B.textContent("text=お支払い額 >> xpath=following-sibling::span"), "¥380");
+assert.equal(await B.textContent("text=お支払い額 >> xpath=following-sibling::span"), "¥390");
+await B.waitForSelector("text=※うち¥10は袋代です");
 await shot(B, "04-order");
 await B.click('main button:has-text("注文する")');
 await B.waitForSelector("text=注文を受け付けました");
@@ -97,11 +98,14 @@ await B.click('button:has-text("スイートミルクラテ")');
 assert.equal(await B.isDisabled('main button:text-is("L")'), true);
 await B.click('button:has-text("カフェラテ")');
 
-step("投稿者も注文 → 自分の分は確認済み");
+step("投稿者も自分の分を追加できる（支払いなし・袋代なし）");
 await A.click(`article:has-text("${nameA}") >> nth=0`);
 await A.waitForSelector("text=NOW OPEN・募集中");
+await A.waitForSelector("text=自分の分も追加できます。");
+assert.equal(await A.locator("text=お願いします！").count(), 0, "投稿者には「一緒に行ける／お願いします」は出ない");
 await A.click('button:has-text("アメリカーノ")');
-await A.click('main button:has-text("注文する")');
+assert.equal(await A.textContent("text=金額（支払いなし） >> xpath=following-sibling::span"), "¥250");
+await A.click('main button:has-text("自分の分を追加")');
 await A.waitForSelector("text=注文を受け付けました");
 
 step("注文一覧（リアルタイム・まとめ）");
@@ -127,7 +131,7 @@ await B.click("text=送金しました（報告する）", { force: true }); // 
 assert.equal(await B.isVisible("text=IDをコピーしてPayPayを開く"), true);
 await shot(B, "06-sheet", false);
 await B.click("text=金額をコピー");
-assert.equal(await clip(B), "380");
+assert.equal(await clip(B), "390");
 await B.click("text=IDをコピーしてPayPayを開く");
 assert.equal(await clip(B), "yamada-kc", "送り先の ID がコピーされる");
 await B.click("text=送金しました（報告する）");
@@ -207,19 +211,19 @@ for (let i = 0; i < 2; i++) {
   await A.waitForSelector("text=受付を再開");
 }
 await goFeed(B);
-await B.waitForSelector(`text=${nameA}さんへ ¥760`);
+await B.waitForSelector(`text=${nameA}さんへ ¥780`);
 await B.waitForSelector("text=未払い・2件まとめて");
-assert.equal(await B.locator('article button:has-text("¥380 払う")').count(), 2, "カードからも直接払える");
+assert.equal(await B.locator('article button:has-text("¥390 払う")').count(), 2, "カードからも直接払える");
 await shot(B, "13-feed-debt", false);
 await B.click('main > div button:text-is("PayPayで払う")');
 await B.waitForSelector("text=前にも送った相手です。IDの入力はいりません");
 await B.waitForSelector("text=（2件まとめて）");
 await shot(B, "14-sheet-bundle", false);
 await B.click('button:has-text("PayPayを開く")');
-assert.equal(await clip(B), "760", "2回目以降は金額をコピー");
+assert.equal(await clip(B), "780", "2回目以降は金額をコピー");
 await B.click("text=送金しました（報告する）");
 await B.waitForSelector("text=2件の送金を報告しました");
-assert.equal(await B.locator(`text=${nameA}さんへ ¥760`).count(), 0, "未払いの欄が消える");
+assert.equal(await B.locator(`text=${nameA}さんへ ¥780`).count(), 0, "未払いの欄が消える");
 
 step("投稿者は「まとめて確認」……は1投稿に2件以上のとき。ここでは各投稿で確認");
 await goFeed(A);
@@ -243,6 +247,16 @@ await A.evaluate((id) => fetch("/api/posts/" + id + "/close", { method: "POST", 
 await B.goto(BASE + "/?p=" + pid + "&tab=pay&pay=1");
 await B.waitForSelector("text=PayPayで支払う");
 await B.waitForSelector("text=あなたの支払い");
+
+step("メンバー・ランキング");
+await goFeed(A);
+await A.click('button[aria-label="メンバー・ランキング"]');
+await A.waitForSelector("text=注文した杯数");
+await A.waitForSelector(`main >> text=${nameA}`);
+await shot(A, "15-ranking-cups");
+await A.click("text=受け取りに行った回数");
+await A.waitForSelector("text=投稿して");
+await shot(A, "16-ranking-runs");
 
 await browser.close();
 console.log(process.exitCode ? "NG" : "OK");

@@ -11,6 +11,7 @@ const SL = "#2C1710";
 const MIN = 60000;
 const LOGO = "/assets/coffee-run-logo.svg";
 const COLORS = ["#EF2027", "#A0643C", "#C49A78", "#2C1710", "#3F7A3A"];
+const BAG_FEE = 10; // 袋代（サーバーの BAG_FEE と同じ）
 const OTHER = { id: "_other", g: "その他", name: "その他のドリンク", p: [null], t: "both", c: 3 };
 // アイコン色: [背景, ふた, カップ] 0 coffee / 1 milk / 2 tea / 3 sweet
 const TINT = [["#EAE2D8", "#2C1710", "#2A1810"], ["#F3EADF", "#E7D6C4", "#A0643C"], ["#E4F0DB", "#A9D18E", "#3F7A3A"], ["#F3EADF", "#C49A78", "#C81A20"]];
@@ -460,6 +461,7 @@ class App extends Component {
     }
     else if (q.get("v") === "compose") this.go("compose", { draft: this.state.draft || this.newDraft() }, false);
     else if (q.get("v") === "profile") this.go("profile", { pf: { ...this.state.me } }, false);
+    else if (q.get("v") === "members") this.openMembers(false);
     else this.go("feed", {}, false);
   }
   openUrl(url) {
@@ -560,11 +562,15 @@ class App extends Component {
   short(o) {
     return o.itemId === "_other" ? o.name + " " + o.temp : o.name + " " + o.sizeLabel + " " + o.temp;
   }
+  // others … 精算の対象（投稿者自身の分は払わないので入れない）
+  // total … お店での合計（袋代ぬき）／ collect … 投稿者が受け取る合計（袋代込み）
   calc(p) {
-    const unpaid = p.orders.filter((o) => o.status === "unpaid");
-    const reported = p.orders.filter((o) => o.status === "reported");
-    const total = p.orders.reduce((a, o) => a + o.price, 0);
-    return { st: this.state.stores[p.store], unpaid, reported, total };
+    const others = p.orders.filter((o) => o.userId !== p.organizerId);
+    const unpaid = others.filter((o) => o.status === "unpaid");
+    const reported = others.filter((o) => o.status === "reported");
+    const total = p.orders.reduce((a, o) => a + o.price - (o.fee || 0), 0);
+    const collect = others.reduce((a, o) => a + o.price, 0);
+    return { st: this.state.stores[p.store], others, unpaid, reported, total, collect };
   }
   slots() {
     const q = 15 * MIN;
@@ -714,6 +720,7 @@ class App extends Component {
           ${!s.online ? html`<div role="status" style="background:#FBE6E4;color:#A3161B;font-size:12px;font-weight:700;padding:8px 20px">接続が切れました。再接続しています…</div>` : null}
           ${v.isFeed ? this.feedView(v) : null}
           ${v.isProfileView ? this.profileView(v) : null}
+          ${v.isMembers ? this.membersView(v) : null}
           ${v.isCompose ? this.composeView(v) : null}
           ${v.isDetail ? this.detailView(v) : null}
           ${s.sheetIds && s.sheetIds.length ? this.sheetView() : null}
@@ -742,18 +749,20 @@ class App extends Component {
       isFeed: view === "feed", isCompose: view === "compose", isDetail: view === "detail",
       isSub: view !== "feed" && view !== "signup", isSignup: view === "signup", isProfile: view === "profile",
       isProfileView: view === "signup" || view === "profile",
+      isMembers: view === "members",
       meInitial: me.name.slice(0, 1),
     };
   }
 
   header(v) {
-    const backLabel = v.view === "compose" ? "キャンセル" : v.view === "profile" ? "戻る" : "投稿一覧";
+    const backLabel = v.view === "compose" ? "キャンセル" : v.view === "profile" || v.view === "members" ? "戻る" : "投稿一覧";
     return html`
       <header style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 12px 20px;gap:12px;border-bottom:1px solid #F4EEE6;position:sticky;top:0;background:#FFFFFF;z-index:6;min-height:44px">
         ${v.isFeed
           ? html`
               <button onClick=${() => this.replaySplash()} aria-label="COFFEE RUN" style="border:none;background:transparent;padding:0;cursor:pointer"><img src=${LOGO} alt="COFFEE RUN" style="height:30px;width:auto;display:block" /></button>
               <div style="display:flex;align-items:center;gap:8px">
+                <button onClick=${() => this.openMembers()} aria-label="メンバー・ランキング" class="hv-back" style="width:36px;height:36px;border-radius:50%;border:none;background:#F4EEE6;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2C1710" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></button>
                 <button onClick=${() => this.go("compose", { draft: this.newDraft() })} class="hv-red" style="height:36px;padding:0 16px;border-radius:18px;border:none;background:#EF2027;color:#FFFFFF;font-size:13px;font-weight:700;cursor:pointer">＋ 投稿</button>
                 <button onClick=${() => this.openProfile()} aria-label="アカウント" style="width:36px;height:36px;border-radius:50%;border:none;background:transparent;padding:0;cursor:pointer"><${Av} size=${36} bg=${v.me.color} fs=${14} src=${photoUrl(v.me)}>${v.meInitial}<//></button>
               </div>`
@@ -769,6 +778,15 @@ class App extends Component {
   back() {
     if (history.state && history.length > 1 && location.search) history.back();
     else this.go("feed");
+  }
+  async openMembers(push = true) {
+    this.go("members", { rankBy: this.state.rankBy || "cups" }, push);
+    try {
+      const j = await api("/api/ranking");
+      this.setState({ members: j.members });
+    } catch (e) {
+      this.fail(e);
+    }
   }
   async openProfile() {
     this.go("profile", { pf: { ...this.state.me } });
@@ -866,7 +884,7 @@ class App extends Component {
                     )}
                   </div>
                   <span style="font-size:12px;color:#7A6A5E">${joinText}</span>
-                  ${!locked ? html`<span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center;flex:none">注文する</span>` : null}
+                  ${!locked ? html`<span style="margin-left:auto;height:30px;padding:0 14px;border-radius:15px;background:#EF2027;color:#FFFFFF;font-size:12px;font-weight:700;display:flex;align-items:center;flex:none">${p.organizerId === v.me.id ? (p.orders.some((o) => o.userId === v.me.id) ? "自分の分を変更" : "自分の分を追加") : "注文する"}</span>` : null}
                   ${(() => {
                     const mineDue = locked && p.orders.find((o) => o.userId === v.me.id && o.status === "unpaid" && p.organizerId !== v.me.id);
                     if (mineDue)
@@ -881,6 +899,56 @@ class App extends Component {
             </article>`;
         })}
         ${list.length === 0 ? html`<div style="padding:48px 20px;text-align:center;font-size:13px;color:#A09284">該当する投稿はありません</div>` : null}
+      </main>`;
+  }
+
+  // ---- メンバー・ランキング ----
+  //   注文した杯数 / 受け取りに行った回数（投稿して行った＋「一緒に行ける！」で行った）
+  membersView(v) {
+    const s = v.s;
+    const by = s.rankBy || "cups";
+    const score = (m) => (by === "cups" ? m.cups : m.hosted + m.went);
+    const list = (s.members || []).slice().sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name, "ja"));
+    // 同じ数なら同じ順位
+    let rank = 0, prev = null;
+    const rows = list.map((m, i) => {
+      const n = score(m);
+      if (n !== prev) rank = i + 1;
+      prev = n;
+      return { m, n, rank };
+    });
+    const MEDAL = { 1: ["#E9B53B", "#FFFFFF"], 2: ["#B9B3AC", "#FFFFFF"], 3: ["#C8875A", "#FFFFFF"] };
+    const unit = by === "cups" ? "杯" : "回";
+    return html`
+      <main data-screen-label="メンバー" style="padding:22px 20px 24px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span style="font-size:20px;font-weight:700">メンバー</span>
+          <span style="font-size:13px;color:#A09284">${s.members ? s.members.length + "人" : ""}</span>
+        </div>
+        <div role="tablist" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;background:#F4EEE6;border-radius:22px;padding:4px">
+          ${[["cups", "注文した杯数"], ["runs", "受け取りに行った回数"]].map(([k, label]) => {
+            const on = by === k;
+            return html`<button role="tab" aria-selected=${on} onClick=${() => this.setState({ rankBy: k })} style="height:36px;border:none;border-radius:18px;background:${on ? "#FFFFFF" : "transparent"};cursor:pointer;font-size:13px;font-weight:700;color:${on ? "#2A1810" : "#7A6A5E"};box-shadow:${on ? "0 1px 3px rgba(0,0,0,0.08)" : "none"};padding:0;white-space:nowrap">${label}</button>`;
+          })}
+        </div>
+        ${!s.members
+          ? html`<div style="padding:40px 0;text-align:center;font-size:13px;color:#A09284">読み込み中…</div>`
+          : html`<div style="display:flex;flex-direction:column">
+              ${rows.map(({ m, n, rank: r }) => {
+                const md = n > 0 && MEDAL[r];
+                const isMe = m.id === v.me.id;
+                return html`<div key=${m.id} style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid #F4EEE6;${isMe ? "background:#FBF7F2;border-radius:12px;padding:12px 10px;margin:0 -6px" : ""}">
+                  <span style="width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:'Archivo Black','Noto Sans JP',sans-serif;font-size:${md ? 14 : 13}px;background:${md ? md[0] : "transparent"};color:${md ? md[1] : "#A09284"}">${n > 0 ? r : "–"}</span>
+                  <${Av} size=${40} bg=${m.color} fs=${15} src=${photoUrl(m)}>${m.name.slice(0, 1)}<//>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                    <span style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name}${isMe ? html`<span style="font-size:10px;font-weight:700;color:#EF2027;margin-left:6px">あなた</span>` : null}</span>
+                    ${by === "runs" && n > 0 ? html`<span style="font-size:11px;color:#7A6A5E">投稿して ${m.hosted}回・一緒に行って ${m.went}回</span>` : null}
+                  </span>
+                  <span style="flex:none;font-variant-numeric:tabular-nums;color:${n ? "#2A1810" : "#C9BDB0"}"><span style="font-size:22px;font-family:'Archivo Black','Noto Sans JP',sans-serif">${n}</span><span style="font-size:11px;margin-left:2px">${unit}</span></span>
+                </div>`;
+              })}
+            </div>
+            <div style="font-size:11px;color:#A09284;line-height:1.6">受け取りに行った回数 … 投稿して注文が1杯以上あったもの＋「一緒に行ける！」で注文したもの（どちらも受付が終わったものだけ）。削除した投稿の分は数えません。</div>`}
       </main>`;
   }
 
@@ -1174,7 +1242,7 @@ class App extends Component {
   }
 
   // ---- 4a. 注文する ----
-  orderTab({ s, p, me, st, locked }) {
+  orderTab({ s, p, me, st, locked, isOrg }) {
     const f = s.form;
     const items = s.menu[p.store] || [];
     const isOther = f.itemId === "_other";
@@ -1183,6 +1251,8 @@ class App extends Component {
     const temp = it.t === "both" ? f.temp : it.t;
     const otherPrice = parseInt(String(f.otherPrice).replace(/[^0-9]/g, ""), 10) || 0;
     const formPrice = isOther ? otherPrice : it.p[size];
+    // 袋代：「お願いします！」だけ（受け取りに行く人へ）。投稿者自身・「一緒に行ける！」はなし
+    const fee = !isOrg && f.mode === "ask" ? BAG_FEE : 0;
     const ok = !!me.name && !locked && (!isOther || (f.otherName.trim() && otherPrice > 0));
     const mine = p.orders.find((o) => o.userId === me.id);
     const last = (me.last || {})[p.store];
@@ -1208,8 +1278,13 @@ class App extends Component {
       this.setForm({ itemId: lastItem ? last.itemId : "_other", size: last.size ?? 1, temp: last.temp, note: last.note || "", mode: last.mode || "ask", otherName: last.customName || "", otherPrice: last.customPrice ? String(last.customPrice) : "", cat: "all" });
     return html`
       <main data-screen-label="注文する" style="padding:18px 20px 20px;display:flex;flex-direction:column;gap:22px">
-        ${locked ? html`<div style="background:#2C1710;color:#FFFFFF;padding:12px 16px;font-size:13px;font-weight:700;border-radius:12px">受付は締め切られました。精算タブから支払いをお願いします。</div>` : null}
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+        ${locked ? html`<div style="background:#2C1710;color:#FFFFFF;padding:12px 16px;font-size:13px;font-weight:700;border-radius:12px">${isOrg ? "受付は締め切られました。" : "受付は締め切られました。精算タブから支払いをお願いします。"}</div>` : null}
+        ${isOrg
+          ? html`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:#F3EADF">
+              <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:#2C1710;color:#FFFFFF;flex:none">あなたの投稿</span>
+              <span style="font-size:13px;line-height:1.5;color:#3E2A20">自分の分も追加できます。<b>支払いはありません</b>（注文一覧のまとめに入ります）</span>
+            </div>`
+          : html`<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
           ${[["go", "一緒に行ける！", "受け取りを手伝います"], ["ask", "お願いします！", "買ってきてほしい"]].map(([k, label, sub]) => {
             const on = f.mode === k;
             return html`<button onClick=${() => this.setForm({ mode: k })} aria-pressed=${on} style="position:relative;padding:14px 12px;border-radius:14px;border:2px solid ${on ? RED : "#EAE2D8"};background:${on ? "#F3EADF" : "#FFFFFF"};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:border-color 160ms ease,background 160ms ease">
@@ -1217,7 +1292,7 @@ class App extends Component {
               <span style="font-size:11px;color:#7A6A5E">${sub}</span>
             </button>`;
           })}
-        </div>
+        </div>`}
 
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;align-items:center;gap:10px">
@@ -1300,10 +1375,11 @@ class App extends Component {
 
         <div style="display:flex;align-items:center;gap:14px;padding-top:4px">
           <div style="display:flex;flex-direction:column">
-            <span style="font-size:11px;color:#A09284">お支払い額</span>
-            <span style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">¥${yen(formPrice)}</span>
+            <span style="font-size:11px;color:#A09284">${isOrg ? "金額（支払いなし）" : "お支払い額"}</span>
+            <span style="font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">¥${yen((formPrice || 0) + fee)}</span>
+            ${fee ? html`<span style="font-size:10px;color:#A09284;white-space:nowrap">※うち¥${fee}は袋代です</span>` : null}
           </div>
-          <button onClick=${submit} disabled=${locked} class=${ok ? "hv-dim" : ""} style="flex:1;height:52px;border:none;border-radius:26px;background:${ok ? RED : "#D6CCC0"};color:#FFFFFF;font-size:15px;font-weight:700;cursor:${ok ? "pointer" : "default"}">${locked ? "受付終了" : isOther && !ok ? "ドリンク名と金額を入力" : mine ? "注文を変更する" : "注文する"}</button>
+          <button onClick=${submit} disabled=${locked} class=${ok ? "hv-dim" : ""} style="flex:1;height:52px;border:none;border-radius:26px;background:${ok ? RED : "#D6CCC0"};color:#FFFFFF;font-size:15px;font-weight:700;cursor:${ok ? "pointer" : "default"}">${locked ? "受付終了" : isOther && !ok ? "ドリンク名と金額を入力" : isOrg ? (mine ? "自分の分を変更" : "自分の分を追加") : mine ? "注文を変更する" : "注文する"}</button>
         </div>
         <div style="font-size:11px;color:#A09284;line-height:1.6">脚注：価格は${st.note}</div>
       </main>`;
@@ -1400,7 +1476,7 @@ class App extends Component {
   // ---- 4c. 精算 ----
   payTab({ p, me, c, org, isOrg }) {
     const ST = { unpaid: ["未払い", "#FBE6E4", "#A3161B"], reported: ["報告あり", "#EAE2D8", SL], done: ["確認済み", "#E4F0DB", "#3F7A3A"] };
-    const list = p.orders;
+    const list = c.others;
     const paid = list.filter((o) => o.status === "done").reduce((a, o) => a + o.price, 0);
     const allPaid = list.length > 0 && c.unpaid.length === 0 && c.reported.length === 0;
     const setStatus = (o, status, msg) =>
@@ -1453,9 +1529,9 @@ class App extends Component {
         <div style="display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;justify-content:space-between;align-items:baseline">
             <span style="font-size:13px;font-weight:700;color:#2C1710">回収状況</span>
-            <span style="font-size:13px;font-variant-numeric:tabular-nums"><span style="font-size:22px;font-weight:700">¥${yen(paid)}</span><span style="color:#A09284"> / ¥${yen(c.total)}</span></span>
+            <span style="font-size:13px;font-variant-numeric:tabular-nums"><span style="font-size:22px;font-weight:700">¥${yen(paid)}</span><span style="color:#A09284"> / ¥${yen(c.collect)}</span></span>
           </div>
-          <div style="height:10px;background:#EAE2D8;border-radius:5px;overflow:hidden"><div style="height:100%;width:${c.total ? Math.round((paid / c.total) * 100) : 0}%;background:#EF2027;border-radius:5px;transition:width 300ms ease"></div></div>
+          <div style="height:10px;background:#EAE2D8;border-radius:5px;overflow:hidden"><div style="height:100%;width:${c.collect ? Math.round((paid / c.collect) * 100) : 0}%;background:#EF2027;border-radius:5px;transition:width 300ms ease"></div></div>
           <div style="display:flex;gap:16px;font-size:12px;color:#7A6A5E">
             <span>確認済み ${list.length - c.unpaid.length - c.reported.length}</span><span>報告あり ${c.reported.length}</span><span style="color:#A3161B;font-weight:700">未払い ${c.unpaid.length}</span>
           </div>
@@ -1565,6 +1641,7 @@ class App extends Component {
             <${CupRed} />
             <span style="font-size:12px;color:#7A6A5E">${me.name}さん → ${org}さん${items.length > 1 ? "（" + items.length + "件まとめて）" : ""}</span>
             <span style="font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.01em;line-height:1.1">¥${yen(total)}</span>
+            ${items.some((x) => x.o.fee) ? html`<span style="font-size:11px;color:#A09284">※袋代 ¥${yen(items.reduce((a, x) => a + (x.o.fee || 0), 0))} を含みます</span>` : null}
             ${items.length === 1
               ? html`<span style="font-size:12px;color:#7A6A5E">${this.short(items[0].o)}</span>`
               : html`<div style="align-self:stretch;display:flex;flex-direction:column;gap:2px;margin-top:4px">${items.map(

@@ -103,18 +103,19 @@ step("注文（金額はサーバーがメニューから決める）");
 let r = await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "m_m424ntne", size: 2, temp: "ICED", mode: "go", note: "氷少なめ", price: 1 } });
 assert.equal(r.status, 200);
 let mine = r.post.orders.find((x) => x.userId === m.me.id);
-assert.deepEqual([mine.name, mine.sizeLabel, mine.temp, mine.price, mine.status, mine.mode], ["スイートミルクラテ", "M", "ICED", 450, "unpaid", "go"], "L が無いので M に寄せる");
+assert.deepEqual([mine.name, mine.sizeLabel, mine.temp, mine.price, mine.fee, mine.status, mine.mode], ["スイートミルクラテ", "M", "ICED", 450, 0, "unpaid", "go"], "L が無いので M に寄せる。「一緒に行ける！」は袋代なし");
 assert.equal(r.me.last.mammoth.itemId, "m_m424ntne", "いつもの");
 r = await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "snow", size: 0, temp: "HOT" } });
 mine = r.post.orders.find((x) => x.userId === m.me.id);
 assert.equal(r.post.orders.length, 1, "1人1注文（上書き）");
-assert.deepEqual([mine.temp, mine.price], ["ICED", 380], "ICED のみの品は ICED");
+assert.deepEqual([mine.temp, mine.price, mine.fee], ["ICED", 390, 10], "ICED のみの品は ICED。「お願いします！」は袋代 ¥10 をのせる");
 assert.equal((await mem(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "nope" } })).error, "item");
 assert.equal((await other(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "_other", customName: "季節のラテ", customPrice: "¥ 650" } })).status, 200);
-r = await org(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "americano", size: 1 } });
-assert.equal(r.post.orders.find((x) => x.userId === o.me.id).status, "done", "投稿者の分は確認済み");
+r = await org(`/api/posts/${post.id}/order`, { method: "PUT", body: { itemId: "americano", size: 1, mode: "go" } });
+const orgOrder = r.post.orders.find((x) => x.userId === o.me.id);
+assert.deepEqual([orgOrder.status, orgOrder.fee, orgOrder.price, orgOrder.mode], ["done", 0, 250, "ask"], "投稿者の分は確認済み・袋代なし（一緒に行くにはならない）");
 const otherOrder = r.post.orders.find((x) => x.name === "季節のラテ");
-assert.equal(otherOrder.price, 650);
+assert.deepEqual([otherOrder.price, otherOrder.fee], [660, 10], "その他のドリンクにも袋代");
 
 step("締切・再開は投稿者だけ");
 assert.equal((await mem(`/api/posts/${post.id}/close`, { method: "POST", body: { closed: true } })).status, 403);
@@ -140,7 +141,7 @@ assert.equal(r.post.msgs.at(-1).text, "着きました");
 
 step("アカウントの集計");
 const me = await mem("/api/me");
-assert.deepEqual(me.me.stats, { count: 1, due: 380 });
+assert.deepEqual(me.me.stats, { count: 1, due: 390 });
 
 step("再開（締切前なら）と、締切5分前の通知");
 assert.equal((await org(`/api/posts/${post.id}/close`, { method: "POST", body: { closed: false } })).post.closed, false);
@@ -205,12 +206,21 @@ await new Promise((r) => setTimeout(r, Math.max(0, dl3 - Date.now() - 1500)));
 m0 = n("/mem");
 assert.ok(await waitFor(() => n("/mem") >= m0 + 1, 20000), "締切時刻に受付終了の通知");
 
+step("ランキング（注文した杯数・受け取りに行った回数）");
+assert.equal((await fetch(BASE + "/api/ranking")).status, 401, "ログインが必要");
+{
+  const rk = (await mem("/api/ranking")).members;
+  const by = (id) => rk.find((x) => x.id === id);
+  assert.deepEqual([by(m.me.id).cups, rk.find((x) => x.name.startsWith("ほか")).cups, by(o.me.id).cups], [3, 1, 1], "杯数（投稿者の自分の分も数える）");
+  assert.deepEqual([by(o.me.id).hosted, by(o.me.id).went, by(m.me.id).hosted], [2, 0, 0], "受付が終わって注文があった投稿＝受け取りに行った（再開して受付中のものは数えない）");
+}
+
 step("投稿の削除は投稿者だけ（注文・チャットも消える）");
 assert.equal((await mem(`/api/posts/${post.id}`, { method: "DELETE" })).status, 403);
 assert.equal((await org(`/api/posts/${post.id}`, { method: "DELETE" })).ok, true);
 assert.equal((await org("/api/boot")).posts.some((p) => p.id === post.id), false);
 assert.equal((await mem(`/api/posts/${post.id}/messages`, { method: "POST", body: { text: "x" } })).status, 404);
-assert.deepEqual((await mem("/api/me")).me.stats, { count: 2, due: 380 }, "消した投稿の注文は集計に残らない（残るのは通知テストの2件）");
+assert.deepEqual((await mem("/api/me")).me.stats, { count: 2, due: 390 }, "消した投稿の注文は集計に残らない（残るのは通知テストの2件）");
 
 srv.close();
 console.log("OK");

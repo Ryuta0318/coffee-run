@@ -3,6 +3,7 @@
 //   締切5分前の通知（Alarm）・Web Push をまかなう。
 import { DurableObject } from "cloudflare:workers";
 import { generateVapid, sendPush, endpointAllowed } from "./push.js";
+import { MERGES, mergeProfiles } from "./merge.js";
 import { MENU, MENU_VERSION, STORES, fitSize } from "./menu.js";
 
 const enc = new TextEncoder();
@@ -97,6 +98,8 @@ export class Hub extends DurableObject {
     try {
       this.sql.exec("ALTER TABLE orders ADD COLUMN fee INTEGER NOT NULL DEFAULT 0");
     } catch {}
+    // 重複アカウントの統合（一度だけ）
+    this.ctx.storage.transactionSync(() => mergeProfiles(this, MERGES));
     const v = this.one("SELECT v FROM kv WHERE k='menu_version'");
     if (!v || Number(v.v) < MENU_VERSION) {
       for (const store of Object.keys(MENU)) this.replaceMenu(store, MENU[store]);
